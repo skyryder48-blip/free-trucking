@@ -1,0 +1,72 @@
+import { writable } from 'svelte/store';
+
+/** Current active screen name */
+export const currentScreen = writable('home');
+
+/** Player driver data: rep score, tier, licenses, certs, stats */
+export const playerData = writable({
+  citizenid: '',
+  name: '',
+  reputationScore: 500,
+  reputationTier: 'developing',
+  suspendedUntil: null,
+  totalLoadsCompleted: 0,
+  totalLoadsFailed: 0,
+  totalLoadsStolen: 0,
+  totalDistanceDriven: 0,
+  totalEarnings: 0,
+  licenses: [],
+  certifications: [],
+  leonAccess: false,
+});
+
+/** Current active load data */
+export const activeLoad = writable(null);
+
+/** Available loads from the job board */
+export const boardData = writable({
+  standard: [],
+  supplier: [],
+  open: [],
+  routes: [],
+});
+
+/** Active insurance policies */
+export const insuranceData = writable({
+  policies: [],
+  availablePlans: [],
+});
+
+/** Company info and members */
+export const companyData = writable({
+  company: null,
+  members: [],
+  activeClaims: [],
+});
+
+/** HUD overlay state for the in-world active load display */
+export const hudData = writable({
+  visible: false,
+  bolNumber: '',
+  cargoType: '',
+  destination: '',
+  distanceRemaining: 0,
+  timeRemaining: 0,
+  temperature: null,
+  tempInRange: true,
+  integrity: 100,
+  sealStatus: 'not_applied',
+  borderState: 'normal', // 'normal' | 'warning' | 'critical'
+});
+
+/** Convoy group data */
+export const convoyData = writable({
+  active: false,
+  convoyId: null,
+  leader: null,
+  members: [],
+  bonusPercentage: 0,
+});
+
+/** NUI visibility state */
+export const visibility = writable(false);
