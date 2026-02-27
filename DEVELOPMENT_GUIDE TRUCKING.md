@@ -37,7 +37,9 @@
 27. [NUI and HUD](#27-nui-and-hud)
 28. [NPC Conversation System](#28-npc-conversation-system)
 29. [Exports and Events](#29-exports-and-events)
-30. [Development Milestones](#30-development-milestones)
+30. [Admin Panel](#30-admin-panel)
+31. [Truck Stop Network](#31-truck-stop-network)
+32. [Development Milestones](#32-development-milestones)
 
 ---
 
@@ -63,7 +65,88 @@ trucking:nui:eventName        — NUI callbacks
 ```
 
 **State management:**
-Active loads stored in server-side table `ActiveLoads` (in-memory, synced to `truck_active_loads` on change). On resource restart, active loads are reloaded from database and mission state is restored for connected players.
+Active loads stored in server-side table `ActiveLoads` (in-memory, synced to `truck_active_loads` on change). On resource restart, active loads are reloaded from database and mission state is restored for connected players. On player reconnect, active loads are restored and monitoring resumes (see Section 6.3).
+
+**Timing:**
+FiveM does not support `os.time()`. All timestamps use server-synced time:
+- **Server-side:** `os.time()` is available on the server only (standard Lua, runs in server context)
+- **Client-side:** Use `GetGameTimer()` for elapsed time (milliseconds, monotonic). For absolute timestamps, request from server via callback or use `GlobalState.serverTime` (synced every 30 seconds)
+- **All payout/reputation/BOL timestamps:** Server-authoritative only. Client never generates timestamps for server consumption
+
+```lua
+-- shared/utils.lua
+-- Server: sync time to GlobalState every 30 seconds
+if IsDuringRecording then return end -- guard
+CreateThread(function()
+    while true do
+        GlobalState.serverTime = os.time()
+        Wait(30000)
+    end
+end)
+
+-- Client: get current server-synced time
+function GetServerTime()
+    return GlobalState.serverTime or 0
+end
+
+-- Client: elapsed time helper (milliseconds)
+function GetElapsed(startTimer)
+    return GetGameTimer() - startTimer
+end
+```
+
+**Event validation:**
+Every server event handler must validate the calling player before processing. No client-reported data is trusted without server cross-check.
+
+```lua
+-- server/main.lua — Validation utility (used by all server event handlers)
+
+--- Verify source player owns the specified BOL/active load
+---@param src number Player server ID
+---@param bolId number BOL ID being acted on
+---@return boolean valid
+function ValidateLoadOwner(src, bolId)
+    local player = exports.qbx_core:GetPlayer(src)
+    if not player then return false end
+    local citizenid = player.PlayerData.citizenid
+
+    local activeLoad = ActiveLoads[bolId]
+    if not activeLoad then return false end
+    if activeLoad.citizenid ~= citizenid then return false end
+    return true
+end
+
+--- Verify source player coords are within range of target coords
+---@param src number Player server ID
+---@param targetCoords vector3 Expected location
+---@param maxDistance number Maximum allowed distance in meters
+---@return boolean valid
+function ValidateProximity(src, targetCoords, maxDistance)
+    local ped = GetPlayerPed(src)
+    local playerCoords = GetEntityCoords(ped)
+    return #(playerCoords - targetCoords) <= maxDistance
+end
+
+--- Rate-limit events per player (prevent spam/exploit)
+local eventCooldowns = {} -- [src .. ':' .. eventName] = GetGameTimer()
+function RateLimitEvent(src, eventName, cooldownMs)
+    local key = src .. ':' .. eventName
+    local now = GetGameTimer()
+    if eventCooldowns[key] and (now - eventCooldowns[key]) < cooldownMs then
+        return false -- rate limited
+    end
+    eventCooldowns[key] = now
+    return true
+end
+
+-- Pattern: every server event handler follows this structure
+RegisterNetEvent('trucking:server:strapComplete', function(bolId, pointNumber)
+    local src = source
+    if not ValidateLoadOwner(src, bolId) then return end
+    if not RateLimitEvent(src, 'strapComplete', 3000) then return end
+    -- Proceed with logic...
+end)
+```
 
 ---
 
@@ -152,7 +235,7 @@ dependencies {
     'oxmysql',
     'ox_lib',
     'ox_inventory',
-    'qb-core',          -- or qbx_core
+    'qbx_core',
 }
 
 -- Optional — lb-phone integration
@@ -921,12 +1004,12 @@ Config.DepositRates = {
 }
 Config.DepositFlatT0 = 300
 
--- Minimum floors by tier
+-- Minimum floors by tier (rebalanced)
 Config.PayoutFloors = {
-    [0] = 200,
-    [1] = 350,
-    [2] = 500,
-    [3] = 750,
+    [0] = 150,
+    [1] = 250,
+    [2] = 400,
+    [3] = 600,
 }
 
 -- Seal break trooper alert priority
@@ -947,7 +1030,7 @@ Config.ExcursionSignificantMins = 15
 Config.WelfarePassiveDecayStart = 30  -- minutes before decay begins
 
 -- Leon access threshold
-Config.LeonUnlockDeliveries    = 15   -- Tier 3 deliveries required
+Config.LeonUnlockDeliveries    = 1    -- Tier 3 deliveries required (unlocks after first T3 completion)
 
 -- Military convoy
 Config.MilitaryEscortPursueRange = 500   -- meters
@@ -961,38 +1044,57 @@ Config.LongConClearanceSuspendDays = 30
 ```lua
 Economy = {}
 
+-- Global server multiplier — tune this single value to scale all payouts
+-- Start at 1.0, adjust during testing based on your server's economy
+-- 0.7 = 30% less across the board, 1.3 = 30% more, etc.
+Economy.ServerMultiplier = 1.0
+
+-- Night haul premium (22:00–06:00 server time)
+Economy.NightHaulPremium = 0.07   -- +7%
+Economy.NightHaulStart   = 22
+Economy.NightHaulEnd     = 6
+
 -- Base rates per mile by tier
 Economy.BaseRates = {
-    [0] = 35,
-    [1] = 55,
-    [2] = 80,
-    [3] = 115,
+    [0] = 25,
+    [1] = 42,
+    [2] = 65,
+    [3] = 95,
 }
 
 -- Cargo type rate modifiers (multiplied by base)
+-- Recalculated against rebalanced base rates:
+-- T0 base $25 | T1 base $42 | T2 base $65 | T3 base $95
 Economy.CargoRateModifiers = {
+    -- Tier 0 ($25 base → $25/mi target)
     light_general_freight   = 1.00,
     food_beverage_small     = 1.00,
     retail_small            = 1.00,
-    courier                 = 1.00,
-    general_freight_full    = 1.00,
-    building_materials      = 1.00,
-    food_beverage_full      = 1.00,
-    food_beverage_reefer    = 1.09,  -- $60/mi T1 reefer
-    retail_full             = 1.00,
-    cold_chain              = 1.125, -- $90/mi T2 cold chain
-    pharmaceutical          = 1.69,  -- $135/mi standard pharma
-    pharmaceutical_biologic = 1.875, -- $150/mi biologic
-    fuel_tanker             = 1.15,
-    liquid_bulk_food        = 1.10,
-    liquid_bulk_industrial  = 1.0625,
-    livestock               = 1.10,
-    oversized               = 1.1875,
-    oversized_heavy         = 1.3125,
-    hazmat                  = 1.2175,
-    hazmat_class7           = 1.435,
-    high_value              = 1.2609,
-    military                = 1.522,
+    courier                 = 1.10,  -- courier premium, short runs
+
+    -- Tier 1 ($42 base)
+    general_freight_full    = 1.00,  -- $42/mi
+    building_materials      = 1.05,  -- $44/mi (heavy, more wear)
+    food_beverage_full      = 1.00,  -- $42/mi
+    food_beverage_reefer    = 1.10,  -- $46/mi (reefer premium)
+    retail_full             = 1.00,  -- $42/mi
+
+    -- Tier 2 ($65 base)
+    cold_chain              = 1.10,  -- $71/mi
+    pharmaceutical          = 1.55,  -- $147/mi (T3 uses T3 base: $95 * 1.55)
+    pharmaceutical_biologic = 1.70,  -- $161/mi
+    fuel_tanker             = 1.12,  -- $73/mi
+    liquid_bulk_food        = 1.08,  -- $70/mi
+    liquid_bulk_industrial  = 1.05,  -- $68/mi
+    livestock               = 1.10,  -- $71/mi
+    oversized               = 1.18,  -- $77/mi
+    oversized_heavy         = 1.30,  -- $84/mi
+
+    -- Tier 3 ($95 base)
+    hazmat                  = 1.20,  -- $114/mi
+    hazmat_class7           = 1.40,  -- $133/mi
+    high_value              = 1.25,  -- $119/mi
+    military                = 1.50,  -- $142/mi
 }
 
 -- Weight multipliers
@@ -1044,7 +1146,7 @@ Economy.ComplianceBonuses = {
     convoy_3            = 0.12,
     convoy_4plus        = 0.15,
 }
-Economy.MaxComplianceStack = 0.36
+Economy.MaxComplianceStack = 0.25  -- 25% max compliance bonus cap
 
 -- Multi-stop premium
 Economy.MultiStopPremium = {
@@ -1237,6 +1339,30 @@ GENERATED → AVAILABLE → RESERVED → ACCEPTED → IN_TRANSIT → DELIVERED
 
 **Delivery:** Player arrives at destination zone → NPC interaction → server calculates final payout → deposit returned → payout issued → `truck_bols` updated → `truck_active_loads` deleted → reputation updated → shipper reputation updated.
 
+**Delivery zone sizing by tier:**
+
+Destination zones scale down with tier to reward precision driving. Higher-tier loads require skilled backing and positioning — the CDL tutorial (Stage 5) teaches this skill, and real gameplay demands it.
+
+| Tier | Zone Type | Zone Size | Description |
+|------|-----------|-----------|-------------|
+| T0 | Pull-up | 12m × 8m | Large parking area — pull in from any angle, van/sprinter fits easily |
+| T1 | Loading dock | 8m × 5m | Standard dock bay — approach from dock side, back in or pull alongside |
+| T2 | Precision dock | 5m × 3.5m | Tight dock — must back trailer into bay, approach angle matters |
+| T3 | Restricted bay | 4m × 3m | Narrow secure bay — precise backing required, bollards on sides |
+
+Zone is defined as an `lib.zones.box` at the destination coords. The player's vehicle (or trailer, for articulated rigs) must enter the zone to trigger the delivery NPC interaction. Oversized loads (T2-05) use a wider zone (8m × 5m) to account for the load dimensions.
+
+```lua
+-- config/config.lua
+Config.DeliveryZoneSizes = {
+    [0] = vec3(12.0, 8.0, 3.0),   -- pull-up
+    [1] = vec3(8.0, 5.0, 3.0),    -- loading dock
+    [2] = vec3(5.0, 3.5, 3.0),    -- precision dock
+    [3] = vec3(4.0, 3.0, 3.0),    -- restricted bay
+}
+Config.OversizedZoneOverride = vec3(8.0, 5.0, 3.0)  -- oversized uses T1-sized zone
+```
+
 ### 6.2 Payout Calculation
 
 ```lua
@@ -1356,7 +1482,18 @@ function CalculatePayout(activeLoad, bolRecord, deliveryData)
     complianceTotal = math.min(complianceTotal, Economy.MaxComplianceStack)
     base = base * (1 + complianceTotal)
 
-    -- Step 10: Floor
+    -- Step 10: Night haul premium
+    local nightMod = 0
+    local hour = tonumber(os.date('%H'))
+    if hour >= Economy.NightHaulStart or hour < Economy.NightHaulEnd then
+        nightMod = Economy.NightHaulPremium
+        base = base * (1 + nightMod)
+    end
+
+    -- Step 11: Server multiplier (global economy tuning)
+    base = base * Economy.ServerMultiplier
+
+    -- Step 12: Floor
     local floor = Config.PayoutFloors[tier]
     local final = math.max(math.floor(base), floor)
 
@@ -1369,10 +1506,114 @@ function CalculatePayout(activeLoad, bolRecord, deliveryData)
         integrity_mod   = integrityMod,
         compliance      = complianceTotal,
         bonuses_earned  = bonuses,
+        night_haul      = nightMod > 0,
+        night_mod       = nightMod,
+        server_mult     = Economy.ServerMultiplier,
         floor_applied   = final == floor,
     }
 end
 ```
+
+### 6.3 Player Reconnect Recovery
+
+On player reconnect (crash, timeout, alt-F4), the server must restore any active load state. Timers are frozen during disconnect — the player is not penalized for time lost to a crash.
+
+```lua
+-- server/main.lua
+RegisterNetEvent('QBCore:Server:OnPlayerLoaded', function()
+    local src = source
+    local player = exports.qbx_core:GetPlayer(src)
+    if not player then return end
+    local citizenid = player.PlayerData.citizenid
+
+    -- Check for active load in database
+    local activeLoad = MySQL.single.await(
+        'SELECT * FROM truck_active_loads WHERE citizenid = ?',
+        { citizenid }
+    )
+    if not activeLoad then return end
+
+    -- Freeze delivery window for time disconnected
+    local lastSeen = MySQL.single.await(
+        'SELECT last_seen FROM truck_drivers WHERE citizenid = ?',
+        { citizenid }
+    )
+    if lastSeen then
+        local disconnectedSeconds = os.time() - lastSeen.last_seen
+        -- Extend window by disconnect duration (grace period)
+        MySQL.update.await([[
+            UPDATE truck_active_loads
+            SET window_expires_at = window_expires_at + ?,
+                window_reduction_secs = window_reduction_secs + ?
+            WHERE id = ?
+        ]], { disconnectedSeconds, disconnectedSeconds, activeLoad.id })
+        activeLoad.window_expires_at = activeLoad.window_expires_at + disconnectedSeconds
+    end
+
+    -- Restore to in-memory ActiveLoads table
+    ActiveLoads[activeLoad.bol_id] = activeLoad
+
+    -- Restore client state
+    Wait(2000) -- allow client to fully load
+    local bol = MySQL.single.await(
+        'SELECT * FROM truck_bols WHERE id = ?', { activeLoad.bol_id }
+    )
+    TriggerClientEvent('trucking:client:restoreActiveLoad', src, activeLoad, bol)
+    lib.notify(src, {
+        title = 'Active Load Restored',
+        description = 'BOL #' .. bol.bol_number .. ' — delivery window extended',
+        type = 'inform'
+    })
+end)
+
+-- Track last_seen on disconnect
+AddEventHandler('playerDropped', function(reason)
+    local src = source
+    local player = exports.qbx_core:GetPlayer(src)
+    if not player then return end
+    MySQL.update.await(
+        'UPDATE truck_drivers SET last_seen = ? WHERE citizenid = ?',
+        { os.time(), player.PlayerData.citizenid }
+    )
+end)
+```
+
+### 6.4 Fuel System Integration
+
+Fuel consumption is handled by the server's vehicle handling script. The trucking script integrates via exports to display fuel cost data on the payout receipt. Fuel is NOT deducted from the trucking payout — it's a real cost the driver pays at the pump. The trucking script simply tracks it for transparency.
+
+```lua
+-- config/config.lua
+Config.VehicleHandlingResource = 'your-vehicle-handling'  -- set to your resource name
+Config.TrackFuelCosts          = true                      -- show fuel cost on receipt
+
+-- server/payout.lua — Fuel cost tracking (informational only)
+function GetFuelCostEstimate(activeLoad, deliveryData)
+    if not Config.TrackFuelCosts then return 0 end
+
+    -- Read fuel consumed from vehicle handling script export
+    local fuelUsed = exports[Config.VehicleHandlingResource]:GetTripFuelConsumed(
+        activeLoad.vehicle_plate
+    )
+    if not fuelUsed then return 0 end
+
+    -- Server fuel price (from your fuel script or economy)
+    local pricePerUnit = exports[Config.VehicleHandlingResource]:GetFuelPrice() or 3.50
+
+    return math.floor(fuelUsed * pricePerUnit)
+end
+
+-- Shown in payout breakdown (not deducted)
+-- payout_breakdown JSON includes:
+-- { ..., fuel_cost_estimate = fuelCost, net_after_fuel = final - fuelCost }
+```
+
+**Required export from vehicle handling script:**
+- `GetTripFuelConsumed(plate)` — returns fuel units consumed since last reset
+- `GetFuelPrice()` — returns current per-unit fuel price
+- Vehicle handling script should call `ResetTripFuel(plate)` when the trucking script signals load acceptance
+
+If your vehicle handling script doesn't expose these exports yet, add them. The trucking script will gracefully skip fuel tracking if the exports return nil.
 
 ---
 
@@ -1382,38 +1623,38 @@ end
 
 | ID | Cargo Type | Vehicle | Rate | Deposit |
 |----|-----------|---------|------|---------|
-| T0-01 | Light General Freight | Van/Sprinter/Pickup | $35/mi | $300 flat |
-| T0-02 | Small Food & Beverage | Van/Sprinter | $35/mi | $300 flat |
-| T0-03 | Small Retail Goods | Van/Sprinter | $35/mi | $300 flat |
-| T0-04 | Small Package / Courier | Van/Sprinter/Moto | $35/mi | $300 flat |
+| T0-01 | Light General Freight | Van/Sprinter/Pickup | $25/mi | $300 flat |
+| T0-02 | Small Food & Beverage | Van/Sprinter | $25/mi | $300 flat |
+| T0-03 | Small Retail Goods | Van/Sprinter | $25/mi | $300 flat |
+| T0-04 | Small Package / Courier | Van/Sprinter/Moto | $27/mi | $300 flat |
 
 ### Tier 1 — Class B CDL
 
 | ID | Cargo Type | Vehicle | Rate | Deposit |
 |----|-----------|---------|------|---------|
-| T1-01 | General Freight Full | Benson/Flatbed | $55/mi | 15% |
-| T1-02 | Building Materials | Flatbed/Tipper | $55/mi | 15% |
-| T1-03 | Food & Beverage Full | Benson/Benson Reefer | $55-60/mi | 15% |
-| T1-04 | Retail Goods Full | Benson (enclosed only) | $55/mi | 15% |
+| T1-01 | General Freight Full | Benson/Flatbed | $42/mi | 15% |
+| T1-02 | Building Materials | Flatbed/Tipper | $44/mi | 15% |
+| T1-03 | Food & Beverage Full | Benson/Benson Reefer | $42-46/mi | 15% |
+| T1-04 | Retail Goods Full | Benson (enclosed only) | $42/mi | 15% |
 
 ### Tier 2 — Class A CDL
 
 | ID | Cargo Type | Vehicle | Rate | Deposit |
 |----|-----------|---------|------|---------|
-| T2-01 | Refrigerated / Cold Chain | Class A Reefer | $90/mi | 20% |
-| T2-02 | Fuel Tanker | Brute Tanker | $92/mi | 20% |
-| T2-03 | Liquid Bulk Non-Fuel | Food/Chemical Tanker | $85-88/mi | 20% |
-| T2-04 | Livestock | Livestock Trailer | $88/mi | 20% |
-| T2-05 | Oversized Equipment | Lowboy/Step-deck | $95/mi | 20% |
+| T2-01 | Refrigerated / Cold Chain | Class A Reefer | $71/mi | 20% |
+| T2-02 | Fuel Tanker | Brute Tanker | $73/mi | 20% |
+| T2-03 | Liquid Bulk Non-Fuel | Food/Chemical Tanker | $68-70/mi | 20% |
+| T2-04 | Livestock | Livestock Trailer | $71/mi | 20% |
+| T2-05 | Oversized Equipment | Lowboy/Step-deck | $77-84/mi | 20% |
 
 ### Tier 3 — Class A + Endorsement
 
 | ID | Cargo Type | Vehicle | Rate | Endorsement | Deposit |
 |----|-----------|---------|------|------------|---------|
-| T3-01 | Pharmaceutical | Class A Reefer | $135-150/mi | Bilkington Cert | 25% |
-| T3-02 | Hazmat / Chemical | Hazmat-rated | $140-165/mi | HAZMAT | 25% |
-| T3-03 | High-Value Goods | Class A Enclosed | $145/mi | High-Value Cert | 25% |
-| T3-05 | Military / Government | Varies | $175/mi | Gov Clearance | 25% |
+| T3-01 | Pharmaceutical | Class A Reefer | $147-161/mi | Bilkington Cert | 25% |
+| T3-02 | Hazmat / Chemical | Hazmat-rated | $114-133/mi | HAZMAT | 25% |
+| T3-03 | High-Value Goods | Class A Enclosed | $119/mi | High-Value Cert | 25% |
+| T3-05 | Military / Government | Varies | $142/mi | Gov Clearance | 25% |
 
 ---
 
@@ -1496,6 +1737,48 @@ Teaches: dock delivery, BOL signing, payout display.
 Duration: ~4 minutes.
 
 **Total time:** ~20 minutes. Class A CDL issued on completion.
+
+### 9.3.1 Repeatable Pre-Trip Inspection
+
+Pre-trip inspection is available on every load as an optional compliance action at origin before departure. Awards the +3% pre-trip compliance bonus. Not required — skipping simply means no bonus.
+
+**Trigger:** Interact with the cab of the truck while at origin, before departing. Available after BOL signed and cargo secured (if applicable).
+
+**Checkpoints (4 total, ~45 seconds):**
+
+```lua
+-- client/interactions.lua
+local preTripChecks = {
+    { id = 'tires',    label = 'Checking tire pressure and tread', duration = 3000 },
+    { id = 'lights',   label = 'Testing marker and brake lights',  duration = 3000 },
+    { id = 'brakes',   label = 'Checking brake line pressure',     duration = 3000 },
+    { id = 'coupling', label = 'Verifying fifth-wheel coupling',   duration = 3000 },
+}
+
+function StartPreTrip(activeLoad)
+    for i, check in ipairs(preTripChecks) do
+        local success = lib.progressBar({
+            duration    = check.duration,
+            label       = check.label .. ' (' .. i .. '/' .. #preTripChecks .. ')',
+            useWhileDead = false,
+            canCancel   = true,
+            anim = {
+                dict = 'mini@repair',
+                clip = 'fixing_a_ped',
+                flag = 49,
+            },
+        })
+        if not success then
+            lib.notify({ title = 'Pre-Trip', description = 'Inspection cancelled', type = 'inform' })
+            return
+        end
+    end
+    TriggerServerEvent('trucking:server:preTripComplete', activeLoad.bol_id)
+    lib.notify({ title = 'Pre-Trip Complete', description = '+3% compliance bonus', type = 'success' })
+end
+```
+
+For Tier 0 (vans/sprinters), coupling check is replaced with "Checking cargo door latch" — same timing, different label. The interaction adapts to vehicle type.
 
 **Standalone path:** Resource `player-licensing` registers stage definitions. Trucking script provides CDL stage implementations. Other scripts register motorcycle/pilot/maritime stages. Licensing resource is the framework only.
 
@@ -1616,11 +1899,11 @@ end)
 Any driver can initiate. Company or solo. Minimum 2, maximum 6 (configurable).
 
 ```lua
--- server/convoy.lua
+-- server/convoy.lua (os.time() valid — runs server-side only)
 RegisterNetEvent('trucking:server:createConvoy', function(convoyType)
     local src = source
     local citizenid = GetCitizenId(src)
-    
+
     local convoyId = MySQL.insert.await(
         'INSERT INTO truck_convoys (initiated_by, convoy_type, created_at) VALUES (?,?,?)',
         { citizenid, convoyType, os.time() }
@@ -1715,7 +1998,7 @@ BoardConfig.SupplierExpiryHours  = { 4, 6, 8 }  -- random range
 Physical ox_inventory item: `trucking_bol`. Metadata contains the BOL number. Player carries it in inventory. Required for insurance claims. Never auto-removed — player disposes manually.
 
 ```lua
--- On load acceptance
+-- On load acceptance (server-side — os.time() valid)
 exports.ox_inventory:addItem(src, 'trucking_bol', 1, {
     bol_number  = bolNumber,
     cargo_type  = cargoType,
@@ -1771,35 +2054,69 @@ Both drivers within 15m → Driver A initiates → Driver B accepts → BOL upda
 ```lua
 -- client/seals.lua
 local sealCheckInterval = nil
+local abandonmentTimer = nil  -- GetGameTimer() value
 
 function StartSealMonitoring(activeLoad)
-    if not activeLoad.seal_status == 'sealed' then return end
-    
+    if activeLoad.seal_status ~= 'sealed' then return end
+
     sealCheckInterval = SetInterval(function()
         local vehicle = GetVehiclePedIsIn(PlayerPedId(), false)
         local trailer = GetVehicleTrailerVehicle(vehicle)
-        
+
         -- Check if trailer is still coupled
         if not trailer or trailer == 0 then
             if activeLoad.status == 'in_transit' then
                 -- Trailer decoupled without transfer authorization
-                TriggerServerEvent('trucking:server:sealBreak', 
+                TriggerServerEvent('trucking:server:sealBreak',
                     activeLoad.bol_id, 'unauthorized_decouple')
             end
         end
-        
-        -- Check abandonment (vehicle stationary 10+ minutes)
+
+        -- Report stationary status — server tracks abandonment timing
         if IsVehicleStationary(vehicle) then
             if not abandonmentTimer then
-                abandonmentTimer = os.time()
-            elseif (os.time() - abandonmentTimer) > 600 then
-                TriggerServerEvent('trucking:server:loadAbandoned', activeLoad.bol_id)
+                abandonmentTimer = GetGameTimer()
+                TriggerServerEvent('trucking:server:vehicleStationary', activeLoad.bol_id)
             end
         else
-            abandonmentTimer = nil
+            if abandonmentTimer then
+                TriggerServerEvent('trucking:server:vehicleMoving', activeLoad.bol_id)
+                abandonmentTimer = nil
+            end
         end
     end, 5000)
 end
+
+-- server/missions.lua — Server-authoritative abandonment tracking
+local stationaryTimers = {} -- [bol_id] = os.time() when stationary reported
+
+RegisterNetEvent('trucking:server:vehicleStationary', function(bolId)
+    local src = source
+    if not ValidateLoadOwner(src, bolId) then return end
+    if not stationaryTimers[bolId] then
+        stationaryTimers[bolId] = os.time()
+    end
+end)
+
+RegisterNetEvent('trucking:server:vehicleMoving', function(bolId)
+    local src = source
+    if not ValidateLoadOwner(src, bolId) then return end
+    stationaryTimers[bolId] = nil
+end)
+
+-- Server tick checks abandonment (every 30 seconds)
+CreateThread(function()
+    while true do
+        Wait(30000)
+        local now = os.time()
+        for bolId, startTime in pairs(stationaryTimers) do
+            if (now - startTime) >= 600 then -- 10 minutes
+                ProcessLoadAbandoned(bolId)
+                stationaryTimers[bolId] = nil
+            end
+        end
+    end
+end)
 ```
 
 ---
@@ -1827,49 +2144,100 @@ Vehicle repaired above health threshold → reefer restores automatically.
 
 ### 15.3 Client Detection
 
+Client reports reefer state changes. Server tracks all excursion timing.
+
 ```lua
 -- client/temperature.lua
-local excursionStart = nil
+local reeferFaulted = false
+local engineOffReported = false
 
 function UpdateTemperatureState(activeLoad)
-    -- Check reefer operational (vehicle health)
     local vehicle = GetVehiclePedIsIn(PlayerPedId(), false)
     local health = GetEntityHealth(vehicle)
-    local threshold = activeLoad.pharma and 
+    local threshold = activeLoad.pharma and
         Config.PharmaHealthThreshold or Config.ReeferHealthThreshold
-    
+
     local reeferOk = health >= threshold
-    
-    if not reeferOk and not excursionStart then
-        excursionStart = os.time()
-        TriggerServerEvent('trucking:server:excursionStart', activeLoad.bol_id)
-        lib.notify({ 
-            title = 'Reefer Fault', 
+
+    -- Report state change to server (server tracks timing)
+    if not reeferOk and not reeferFaulted then
+        reeferFaulted = true
+        TriggerServerEvent('trucking:server:reeferFault', activeLoad.bol_id, health)
+        lib.notify({
+            title = 'Reefer Fault',
             description = 'Temperature control lost. Vehicle requires service.',
-            type = 'error' 
+            type = 'error'
         })
-    elseif reeferOk and excursionStart then
-        local duration = os.time() - excursionStart
-        excursionStart = nil
-        TriggerServerEvent('trucking:server:excursionEnd', activeLoad.bol_id, duration)
+    elseif reeferOk and reeferFaulted then
+        reeferFaulted = false
+        TriggerServerEvent('trucking:server:reeferRestored', activeLoad.bol_id, health)
     end
-    
-    -- Engine off check
-    if not GetIsVehicleEngineRunning(vehicle) then
-        if not engineOffTime then
-            engineOffTime = os.time()
-        elseif (os.time() - engineOffTime) > 300 then
-            -- 5 minutes engine off — trigger excursion
-            if not excursionStart then
-                excursionStart = os.time()
-                TriggerServerEvent('trucking:server:excursionStart', 
-                    activeLoad.bol_id, 'engine_off')
-            end
-        end
-    else
-        engineOffTime = nil
+
+    -- Engine off — report state change only
+    local engineRunning = GetIsVehicleEngineRunning(vehicle)
+    if not engineRunning and not engineOffReported then
+        engineOffReported = true
+        TriggerServerEvent('trucking:server:engineOff', activeLoad.bol_id)
+    elseif engineRunning and engineOffReported then
+        engineOffReported = false
+        TriggerServerEvent('trucking:server:engineOn', activeLoad.bol_id)
     end
 end
+
+-- server/temperature.lua — Server-authoritative excursion tracking
+local reeferFaults = {}   -- [bol_id] = os.time()
+local engineOffTimers = {} -- [bol_id] = os.time()
+
+RegisterNetEvent('trucking:server:reeferFault', function(bolId, clientHealth)
+    local src = source
+    if not ValidateLoadOwner(src, bolId) then return end
+    -- Server-side health verification
+    local ped = GetPlayerPed(src)
+    local vehicle = GetVehiclePedIsUsing(ped)
+    if vehicle and vehicle ~= 0 then
+        local serverHealth = GetEntityHealth(vehicle)
+        -- Allow ±50 tolerance for network latency
+        if math.abs(serverHealth - clientHealth) > 50 then return end
+    end
+    reeferFaults[bolId] = os.time()
+    StartExcursion(bolId)
+end)
+
+RegisterNetEvent('trucking:server:reeferRestored', function(bolId, clientHealth)
+    local src = source
+    if not ValidateLoadOwner(src, bolId) then return end
+    if reeferFaults[bolId] then
+        local duration = os.time() - reeferFaults[bolId]
+        reeferFaults[bolId] = nil
+        EndExcursion(bolId, duration)
+    end
+end)
+
+RegisterNetEvent('trucking:server:engineOff', function(bolId)
+    local src = source
+    if not ValidateLoadOwner(src, bolId) then return end
+    engineOffTimers[bolId] = os.time()
+end)
+
+RegisterNetEvent('trucking:server:engineOn', function(bolId)
+    local src = source
+    if not ValidateLoadOwner(src, bolId) then return end
+    engineOffTimers[bolId] = nil
+end)
+
+-- Server tick: check engine-off excursion threshold (every 30 seconds)
+CreateThread(function()
+    while true do
+        Wait(30000)
+        local now = os.time()
+        for bolId, offTime in pairs(engineOffTimers) do
+            if (now - offTime) >= 300 and not reeferFaults[bolId] then
+                reeferFaults[bolId] = offTime -- backdate to engine-off time
+                StartExcursion(bolId)
+            end
+        end
+    end
+end)
 ```
 
 ---
@@ -1890,9 +2258,9 @@ Replaces cargo integrity for livestock hauls. Final rating determines payout mul
 | Off-road driving | -1 per minute |
 | Heat (Sandy Shores idle) | -1 per 10 min |
 | Smooth driving | passive recovery +0.25/10 min |
-| Rest stop (quick, 2 min) | +0.5 |
-| Rest stop (water, 8 min) | +1.0 |
-| Rest stop (full, 15 min) | +1.5 |
+| Rest stop (quick, 30 sec) | +0.5 |
+| Rest stop (water, 2 min) | +1.0 |
+| Rest stop (full, 5 min) | +1.5 |
 | Transit time 30-60 min | -0.25 per 30 min |
 | Transit time 60-90 min | -0.5 per 30 min |
 | Transit time 90+ min | -1.0 per 30 min |
@@ -1903,12 +2271,12 @@ ox_lib progressBar hold interaction at any designated truck stop:
 
 ```lua
 lib.progressBar({
-    duration = 480000, -- 8 minutes for water stop
+    duration = 120000, -- 2 minutes for water stop
     label    = 'Water and rest stop',
     canCancel = true,
 }, function(cancelled)
     if not cancelled then
-        TriggerServerEvent('trucking:server:livestockRestStop', 
+        TriggerServerEvent('trucking:server:livestockRestStop',
             activeLoad.bol_id, 'water')
     end
 end)
@@ -1958,7 +2326,7 @@ Flatbed and oversized loads require securing before departure.
 | Day Policy | $200–$1,800 by tier | All loads for 24 hours |
 | Week Policy | $1,000–$9,500 by tier | All loads for 7 days |
 
-Purchased at any dispatch desk or via app. Hard block on load acceptance if no active policy.
+Purchased at any dispatch desk, truck stop terminal, or via app. Hard block on load acceptance for **Tier 1 and above** if no active policy. **Tier 0 loads do not require insurance** — the flat $300 deposit is the only financial exposure, keeping the entry barrier low for new truckers.
 
 ### 19.2 Coverage
 
@@ -1982,8 +2350,8 @@ Insurance does NOT cover: time penalties, CDL mismatch violations, integrity deg
 -- server/insurance.lua
 
 function VerifyAndApproveClaim(citizenid, bolNumber)
-    -- Fetch BOL
-    local bol = MySQL.scalar.await(
+    -- Fetch BOL (single row — use MySQL.single.await, NOT scalar)
+    local bol = MySQL.single.await(
         'SELECT * FROM truck_bols WHERE bol_number = ? AND citizenid = ?',
         { bolNumber, citizenid }
     )
@@ -1994,17 +2362,17 @@ function VerifyAndApproveClaim(citizenid, bolNumber)
     if not bol.item_in_inventory then return false, 'bol_not_in_inventory' end
 
     -- Fetch deposit
-    local deposit = MySQL.scalar.await(
+    local deposit = MySQL.single.await(
         'SELECT * FROM truck_deposits WHERE bol_id = ? AND status = ?',
         { bol.id, 'forfeited' }
     )
     if not deposit then return false, 'deposit_not_forfeited' end
 
     -- Fetch policy
-    local policy = MySQL.scalar.await([[
-        SELECT * FROM truck_insurance_policies 
+    local policy = MySQL.single.await([[
+        SELECT * FROM truck_insurance_policies
         WHERE citizenid = ? AND status = 'active'
-        AND valid_from <= ? 
+        AND valid_from <= ?
         AND (valid_until IS NULL OR valid_until >= ?)
     ]], { citizenid, bol.issued_at, bol.issued_at })
     if not policy then return false, 'no_policy_at_time' end
@@ -2045,20 +2413,27 @@ CreateThread(function()
         ]], { os.time() })
         
         for _, claim in ipairs(pendingClaims) do
-            -- Issue payout via QBox banking
-            TriggerEvent('qb-banking:server:addMoney', 
-                claim.citizenid, claim.claim_amount, 'Insurance claim payout')
-            
+            -- Issue payout via QBX player functions
+            local playerSrc = exports.qbx_core:GetPlayerByCitizenId(claim.citizenid)
+            if playerSrc then
+                local player = exports.qbx_core:GetPlayer(playerSrc)
+                player.Functions.AddMoney('bank', claim.claim_amount,
+                    'Insurance claim payout - BOL #' .. claim.bol_number)
+
+                TriggerClientEvent('trucking:client:claimPaid', playerSrc, claim.claim_amount)
+            else
+                -- Player offline — queue for next login
+                MySQL.update.await([[
+                    UPDATE truck_insurance_claims SET payout_at = ? WHERE id = ?
+                ]], { os.time() + 60, claim.id }) -- retry in 60 seconds
+                goto continue
+            end
+
             MySQL.update.await(
                 'UPDATE truck_insurance_claims SET status = ?, resolved_at = ? WHERE id = ?',
                 { 'paid', os.time(), claim.id }
             )
-            
-            -- Notify player if online
-            local playerSrc = GetPlayerByIdentifier(claim.citizenid)
-            if playerSrc then
-                TriggerClientEvent('trucking:client:claimPaid', playerSrc, claim.claim_amount)
-            end
+            ::continue::
         end
     end
 end)
@@ -2130,7 +2505,7 @@ Per-driver, per-shipper. Five tiers.
 
 ### 21.1 Leon Unlock
 
-Automatic unlock after 15 Tier 3 deliveries. No fanfare. Leon is simply at his spot at 22:00 one night.
+Automatic unlock after completing your first Tier 3 delivery. No fanfare. Leon is simply at his spot at 22:00 one night. The logic: you've proven you can handle the highest-tier legitimate freight — now you've got options.
 
 **Discovery:** Three optional approaches (dialogue-based). No script gates on which approach — players find him through server knowledge, word of mouth, or exploration.
 
@@ -2155,15 +2530,15 @@ Automatic unlock after 15 Tier 3 deliveries. No fanfare. Leon is simply at his s
 
 ### 21.3 Criminal Suppliers
 
-Five suppliers accessible via Leon relationship progression:
+Five suppliers accessible via Leon relationship progression. Named for the Chicago map overlay — each operates in their "neighborhood" the way real Chicago freight operations bleed into the grey market:
 
 | Supplier | Region | Rate | Risk | Unlock |
 |---------|--------|------|------|--------|
-| Chamberlain Distribution | Los Santos | 115% | Low | First Leon load |
-| Ancelotti Freight Solutions | Los Santos | 130% | Medium | 3 Leon loads |
-| Aztecas Agricultural Supply | Sandy Shores | 145% | High | HAZMAT endorsement req. |
-| Vespucci Cold Chain | Paleto | 150% | Medium | Tier 3 cold chain rep |
-| Jade River Import/Export | Grapeseed | 160% | Critical | 2 other suppliers done |
+| Southside Consolidated | Los Santos (south industrial) | 115% | Low | First Leon load |
+| La Puerta Freight Solutions | Los Santos (port-adjacent) | 130% | Medium | 3 Leon loads |
+| Blaine County Salvage & Ag | Sandy Shores | 145% | High | HAZMAT endorsement req. |
+| Paleto Bay Cold Storage | Paleto | 150% | Medium | Tier 3 cold chain rep |
+| Pacific Bluffs Import/Export | Grapeseed (coastal route) | 160% | Critical | 2 other suppliers done |
 
 **Expansion hook:**
 ```lua
@@ -2711,7 +3086,230 @@ end
 
 ---
 
-## 30. DEVELOPMENT MILESTONES
+## 30. ADMIN PANEL
+
+### 30.1 Access
+
+Server-side command `/truckadmin` restricted by QBX permission group or ace permission. Opens admin NUI panel or uses ox_lib context menus for lightweight implementation.
+
+```lua
+-- server/admin.lua
+lib.addCommand('truckadmin', {
+    help = 'Open trucking admin panel',
+    restricted = 'group.admin',
+}, function(source, args)
+    TriggerClientEvent('trucking:client:openAdminPanel', source)
+end)
+```
+
+### 30.2 Features
+
+**Player Lookup:**
+- Search by citizenid or player name
+- View: reputation score/tier, all licenses, all certifications, active load (if any), total stats
+- View: shipper reputation breakdown, Leon access status
+- View: BOL history with full event audit trail
+- Action: adjust reputation score (with reason logged)
+- Action: suspend/unsuspend driver
+- Action: revoke/reinstate licenses or certifications
+- Action: force-complete or force-abandon a stuck active load
+
+**Economy Controls:**
+- Live server multiplier adjustment (`Economy.ServerMultiplier`) — takes effect immediately
+- Manual surge creation: select region, cargo type, percentage, duration
+- Cancel active surges
+- View current board state per region (load counts, expiry times)
+- Force board refresh for a specific region
+
+**Load Management:**
+- View all active loads server-wide (who, what, where, ETA)
+- Force-abandon a stuck load (returns deposit, no rep penalty)
+- Force-complete a load (for testing or compensation)
+- View orphaned loads and resolve them
+
+**Insurance Oversight:**
+- View pending claims
+- Manually approve or deny a claim
+- View claim history by player
+
+**Audit Log:**
+- All admin actions logged to `truck_webhook_log` with `webhook_channel = 'admin'`
+- Discord webhook fires on every admin action (if configured)
+
+```lua
+-- server/admin.lua — Example: manual surge
+RegisterNetEvent('trucking:server:admin:createSurge', function(data)
+    local src = source
+    if not IsPlayerAdmin(src) then return end
+
+    MySQL.insert.await([[
+        INSERT INTO truck_surge_events
+        (region, surge_type, cargo_type_filter, surge_percentage, status, started_at, expires_at)
+        VALUES (?, 'manual', ?, ?, 'active', ?, ?)
+    ]], {
+        data.region,
+        data.cargoFilter or nil,
+        data.percentage,
+        os.time(),
+        os.time() + (data.durationMinutes * 60)
+    })
+
+    LogAdminAction(src, 'create_surge', data)
+    RefreshBoardForRegion(data.region)
+end)
+
+-- Example: force-complete stuck load
+RegisterNetEvent('trucking:server:admin:forceComplete', function(bolId, reason)
+    local src = source
+    if not IsPlayerAdmin(src) then return end
+
+    local activeLoad = ActiveLoads[bolId]
+    if not activeLoad then return end
+
+    -- Return deposit, issue base payout, clean up state
+    ReturnDeposit(activeLoad)
+    local basePayout = Config.PayoutFloors[activeLoad.tier] or 200
+    local player = exports.qbx_core:GetPlayerByCitizenId(activeLoad.citizenid)
+    if player then
+        local p = exports.qbx_core:GetPlayer(player)
+        p.Functions.AddMoney('bank', basePayout, 'Admin force-complete: ' .. reason)
+    end
+
+    CleanupActiveLoad(bolId)
+    LogAdminAction(src, 'force_complete', { bol_id = bolId, reason = reason, payout = basePayout })
+end)
+```
+
+### 30.3 Discord Webhooks (Admin Channel)
+
+All admin actions fire to the admin webhook:
+```lua
+-- server/webhooks.lua
+function LogAdminAction(src, actionType, data)
+    local adminName = GetPlayerName(src)
+    local embed = {
+        title = 'Admin Action: ' .. actionType,
+        color = 0xC83803, -- Bears orange
+        fields = {
+            { name = 'Admin', value = adminName, inline = true },
+            { name = 'Action', value = actionType, inline = true },
+            { name = 'Details', value = json.encode(data), inline = false },
+        },
+        timestamp = os.date('!%Y-%m-%dT%H:%M:%SZ'),
+    }
+    SendWebhook('admin', embed)
+end
+```
+
+---
+
+## 31. TRUCK STOP NETWORK
+
+### 31.1 Purpose
+
+Truck stops serve as social hubs, service points, and strategic rest locations. They provide gameplay utility beyond just livestock rest stops — they're where truckers fuel up, check the board, buy insurance, and run into each other.
+
+### 31.2 Locations
+
+| Stop | Region | Features |
+|------|--------|----------|
+| Route 68 Truck Plaza | Sandy Shores | Full service, weigh station adjacent |
+| Harmony Rest Area | Sandy Shores | Basic service, livestock rest |
+| Paleto Highway Stop | Paleto | Full service, board terminal |
+| Grapeseed Co-op Fuel | Grapeseed | Fuel only, livestock rest |
+| LSIA Commercial Yard | Los Santos | Full service, insurance office |
+| Port of LS Staging | Los Santos | Full service, weigh station adjacent |
+
+### 31.3 Service Tiers
+
+**Basic Stop** (2 locations):
+- Fuel pump (integration with vehicle handling script)
+- Board access terminal (view board, no NPC needed)
+- Livestock rest zone
+
+**Full Service Stop** (4 locations):
+- Everything from Basic, plus:
+- Repair bay — basic repair up to 80% health, cheaper than LS Customs. Uses ox_lib progressBar, 15 seconds, costs $200-$500 scaled to damage
+- Insurance terminal — purchase policies without visiting Vapid office
+- Board access terminal with load acceptance capability
+- NPC shipper representative (for shipper rep interactions)
+- Parking area (safe zone — no robbery within 200m)
+
+### 31.4 Board Access Terminal
+
+Allows checking the board from any truck stop without returning to dispatch. Full board view and load acceptance. Uses the same NUI as dispatch but triggered from a different interaction point.
+
+```lua
+-- client/interactions.lua
+-- Create board terminal zone at each truck stop
+for _, stop in pairs(TruckStops) do
+    if stop.hasTerminal then
+        lib.zones.box({
+            coords = stop.terminalCoords,
+            size = vec3(2, 2, 2),
+            rotation = stop.terminalHeading,
+            onEnter = function()
+                lib.showTextUI('[E] Freight Board Terminal')
+            end,
+            onExit = function()
+                lib.hideTextUI()
+            end,
+            inside = function()
+                if IsControlJustReleased(0, 38) then -- E key
+                    TriggerServerEvent('trucking:server:openBoard', GetPlayerRegion())
+                end
+            end,
+        })
+    end
+end
+```
+
+### 31.5 Repair Bay
+
+Quick field repair for truckers who don't want to detour to a mechanic. Caps at 80% health — full repair requires LS Customs or a player mechanic. Prevents reefer failures from cascading into excursions if caught early.
+
+```lua
+-- client/interactions.lua
+function StartTruckStopRepair()
+    local vehicle = GetVehiclePedIsIn(PlayerPedId(), false)
+    if not vehicle or vehicle == 0 then
+        lib.notify({ title = 'Repair', description = 'Must be in a vehicle', type = 'error' })
+        return
+    end
+
+    local health = GetEntityHealth(vehicle)
+    local maxRepairHealth = 800  -- 80% of 1000
+    if health >= maxRepairHealth then
+        lib.notify({ title = 'Repair', description = 'Vehicle doesn\'t need service', type = 'inform' })
+        return
+    end
+
+    local damage = maxRepairHealth - health
+    local cost = math.floor(damage * 0.6)  -- ~$200-500 range
+
+    local confirmed = lib.alertDialog({
+        header = 'Truck Stop Repair',
+        content = string.format('Repair to 80%% health\nEstimated cost: $%s', cost),
+        cancel = true,
+    })
+
+    if confirmed == 'confirm' then
+        local success = lib.progressBar({
+            duration = 15000,
+            label = 'Repairing vehicle...',
+            canCancel = true,
+            anim = { dict = 'mini@repair', clip = 'fixing_a_player', flag = 49 },
+        })
+        if success then
+            TriggerServerEvent('trucking:server:truckStopRepair', GetVehicleNumberPlateText(vehicle), cost)
+        end
+    end
+end
+```
+
+---
+
+## 32. DEVELOPMENT MILESTONES
 
 ### Phase 1 — Foundation (Milestone 1)
 
@@ -2730,14 +3328,18 @@ end
 [ ] BOL item → ox_inventory
 [ ] Active load HUD — 3-line overlay
 [ ] Delivery interaction — basic NPC, BOL sign
-[ ] Payout calculation — Tier 0 (base rate + floor)
+[ ] Delivery zone sizing — T0 pull-up zone (12m × 8m)
+[ ] Payout calculation — Tier 0 (base rate + floor + server multiplier)
+[ ] Night haul premium detection (+7% between 22:00–06:00)
 [ ] Deposit return on delivery
 [ ] truck_active_loads: create and delete
 [ ] truck_bol_events: append on key events
+[ ] Server-side event validation (ValidateLoadOwner, ValidateProximity, RateLimitEvent)
+[ ] GlobalState.serverTime sync for client-side time display
 [ ] Resource start/stop handling
 ```
 
-**Test:** Accept a van load, drive to destination, deliver, receive payout, deposit returned.
+**Test:** Accept a van load, drive to destination, deliver, receive payout, deposit returned. Verify night haul premium if tested after 22:00.
 
 ---
 
@@ -2753,6 +3355,8 @@ end
 [ ] Board filtering — tier filter
 [ ] Cargo securing interaction (flatbed)
 [ ] Manifest verification interaction
+[ ] Repeatable pre-trip inspection (4 checkpoints, ~45 sec, +3% bonus)
+[ ] Delivery zone scaling — T1 loading dock (8m × 5m)
 [ ] Reputation system — driver score
 [ ] Reputation system — shipper rep
 [ ] Rep update on delivery and failure
@@ -2800,7 +3404,8 @@ end
 [ ] Open contracts tab
 [ ] Surge events — detection + board display
 [ ] Insurance system — all 3 policy types
-[ ] Insurance hard block on load acceptance
+[ ] Insurance hard block on T1+ load acceptance (T0 exempt)
+[ ] Delivery zone scaling — T2 precision dock (5m × 3.5m)
 [ ] NUI: Insurance screen
 [ ] Vapid office claim interaction
 [ ] Claim verification + 15-minute payout queue
@@ -2820,6 +3425,7 @@ end
 [ ] Government Clearance — instant on qualification
 [ ] Tier 3: T3-01 pharmaceutical
 [ ] Pharmaceutical reefer threshold (80%)
+[ ] Delivery zone scaling — T3 restricted bay (4m × 3m)
 [ ] Tier 3: T3-02 HAZMAT
 [ ] HAZMAT routing restrictions + GPS
 [ ] HAZMAT routing violation → auto dispatch
@@ -2846,7 +3452,7 @@ end
 
 ```
 [ ] Leon location and hours gate
-[ ] Leon unlock threshold (15 Tier 3 deliveries)
+[ ] Leon unlock threshold (1 Tier 3 delivery)
 [ ] Leon board — 5 loads, 3-hour refresh
 [ ] Leon NUI — risk/fee only, reveal on payment
 [ ] Leon fee deduction (cash, not bank)
@@ -2956,12 +3562,45 @@ end
 [ ] Webhook implementation (all channels)
 [ ] Maintenance query scheduling
 [ ] Resource restart load recovery
+[ ] Player reconnect active load restoration
 [ ] Full QA pass — all systems end-to-end
 ```
 
+**Test:** Crash client mid-delivery, reconnect, verify load restored with window extension.
+
 ---
 
-### Phase 9 — Standalone Licensing Resource (Milestone 9, Optional)
+### Phase 9 — Admin Panel and Truck Stops (Milestone 9)
+
+**Goal:** Admin tools for live server management. Truck stop network operational.
+
+```
+[ ] /truckadmin command with ace permission check
+[ ] Player lookup by citizenid or name
+[ ] View driver profile (rep, licenses, certs, stats)
+[ ] View BOL history with event audit trail
+[ ] Adjust reputation score (with reason logging)
+[ ] Suspend/unsuspend driver
+[ ] Force-complete stuck active load
+[ ] Force-abandon stuck active load
+[ ] Economy.ServerMultiplier live adjustment
+[ ] Manual surge creation/cancellation
+[ ] Force board refresh per region
+[ ] View all active loads server-wide
+[ ] All admin actions logged to webhook
+[ ] Truck stop zones — 6 locations
+[ ] Truck stop board access terminals
+[ ] Truck stop repair bay interaction
+[ ] Truck stop insurance terminal
+[ ] Truck stop fuel integration (vehicle handling export)
+[ ] Fuel cost display on payout receipt
+```
+
+**Test:** Admin adjusts server multiplier, creates manual surge, force-completes a stuck load. Player uses truck stop to repair, check board, and buy insurance.
+
+---
+
+### Phase 10 — Standalone Licensing Resource (Milestone 10, Optional)
 
 **Goal:** Extract CDL tutorial into standalone `player-licensing` framework.
 
@@ -2980,13 +3619,15 @@ end
 
 ## APPENDIX A — LEON'S CRIMINAL SUPPLIER REFERENCE
 
+Each supplier mirrors the way Chicago's freight industry operates in the grey areas — legitimate-looking operations running loads that don't hold up to DOT scrutiny. Named after GTA map locations, styled after Chicago neighborhoods where the warehouses sit under the L tracks and nobody asks what's in the container.
+
 | Supplier | Background | Available Loads | Rate |
 |---------|-----------|----------------|------|
-| Chamberlain Distribution | African-American organized distribution | Consumer goods, clothing, electronics off-book | 115% |
-| Ancelotti Freight Solutions | Italian-American | Sealed containers, electronics, pharma forgeries | 130% |
-| Aztecas Agricultural Supply | Latino | Agricultural chemicals, bulk drums, HAZMAT no-docs | 145% |
-| Vespucci Cold Chain | Russian | Sealed reefer cargo, cold chain pharma concealment | 150% |
-| Jade River Import/Export | Asian | Produce with concealed goods, highest payout | 160% |
+| Southside Consolidated | Runs out of the industrial blocks south of the port. Legit distribution front — off-book consumer goods, unmanifested clothing, electronics that fell off a different truck. Entry-level work. | Consumer goods, clothing, electronics off-book | 115% |
+| La Puerta Freight Solutions | Port-adjacent operation. The kind of place with too many roll-up doors and not enough questions. Sealed containers arrive, sealed containers leave. You don't open them. | Sealed containers, electronics, pharmaceutical forgeries | 130% |
+| Blaine County Salvage & Ag | Desert operation running chemical drums, agricultural product that doesn't match any MSDS sheet, and bulk loads that definitely aren't on any manifest. HAZMAT knowledge required — Leon won't send amateurs into the desert with unlabeled drums. | Agricultural chemicals, bulk drums, HAZMAT no-docs | 145% |
+| Paleto Bay Cold Storage | Cold chain operation in Paleto. Medical-grade reefer trucks running loads that Bilkington won't put their name on. The cargo is real — the paperwork isn't. Temperature still matters. | Sealed reefer cargo, cold chain pharmaceutical concealment | 150% |
+| Pacific Bluffs Import/Export | Coastal route operation. Produce trucks with false floors, seafood containers with extra weight. The most lucrative and the most watched. Leon only sends drivers who've proven themselves with two other suppliers. | Produce with concealed goods, highest payout | 160% |
 
 ---
 
@@ -3005,9 +3646,9 @@ end
 
 ```
 oxmysql         — latest stable
-ox_lib          — latest stable  
+ox_lib          — latest stable
 ox_inventory    — latest stable
-qb-core         — latest stable (or qbx_core equivalent)
+qbx_core        — latest stable
 lb-phone        — optional, specify version if integrating
 ```
 
