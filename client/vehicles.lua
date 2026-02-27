@@ -454,10 +454,10 @@ function IsPointOnRoad(x, y, z, vehicle)
     return true  -- default to on-road if uncertain
 end
 
---- Check if entity is in water
+--- Check if entity is submerged in water using native.
 ---@param entity number Entity handle
 ---@return boolean
-function IsEntityInWater(entity)
+function CheckEntityInWater(entity)
     return IsEntityInWater(entity)
 end
 
