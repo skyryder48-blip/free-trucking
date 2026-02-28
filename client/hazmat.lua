@@ -69,7 +69,7 @@ local HAZMAT_CLASSES = {
         ptfxColor       = { r = 1.0, g = 0.7, b = 0.0 },  -- yellow/orange radiation
         soundSet        = 'dlc_heist_biolab_prep_ambience_sounds',
         soundName       = 'Electrical_Interference',       -- Geiger counter approximation
-        cleanupItem     = 'hazmat_cleanup_specialist',     -- specialist item required
+        cleanupItem     = 'hazmat_cleanup_kit',
         cleanupDuration = 60000,
     },
     [8] = {
@@ -515,9 +515,7 @@ local function AttemptCleanup(zoneId)
     local hasItem = itemOk and itemResult > 0
 
     if not hasItem then
-        local itemLabel = requiredItem == 'hazmat_cleanup_specialist'
-            and 'Specialist Cleanup Kit'
-            or 'Hazmat Cleanup Kit'
+        local itemLabel = 'HAZMAT Cleanup Kit'
 
         lib.notify({
             title       = 'Hazmat Cleanup',

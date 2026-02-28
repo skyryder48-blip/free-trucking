@@ -413,8 +413,8 @@ ExplosionProfiles['hazmat_class6'] = {
 -- HAZMAT CLASS 7 — RADIOACTIVE
 -- ─────────────────────────────────────────────
 -- No fire or explosion. Radiation field with Geiger counter audio.
--- Wide DOT radius. Requires hazmat_cleanup_specialist item.
--- Most dangerous persistent hazard — lasts until specialist cleanup.
+-- Wide DOT radius. Requires hazmat_cleanup_kit.
+-- Most dangerous persistent hazard — lasts until cleanup.
 ExplosionProfiles['hazmat_class7'] = {
     label           = 'Radiation Release (HAZMAT Class 7)',
     description     = 'Invisible radiation field with Geiger counter detection and persistent DOT',
@@ -423,7 +423,7 @@ ExplosionProfiles['hazmat_class7'] = {
     dispatch_alert  = true,
     dispatch_priority = 'critical',
     hazmat_class    = 7,
-    cleanup_item    = 'hazmat_cleanup_specialist',   -- specialized cleanup required
+    cleanup_item    = 'hazmat_cleanup_kit',
 
     phases = {
         -- Phase 1: Containment Failure

@@ -107,11 +107,8 @@ local function DoHazmatPlacardCheck(activeLoad)
     local unNumber = activeLoad.hazmat_un_number or 'N/A'
 
     local result = lib.alertDialog({
-        header = 'HAZMAT Placard Inspection',
-        content = 'DOT Inspector is verifying your hazmat placards.\n\n'
-            .. '**Placard Class:** ' .. tostring(placardClass) .. '\n'
-            .. '**UN Number:** ' .. tostring(unNumber) .. '\n\n'
-            .. 'Inspector confirms placards are properly displayed.',
+        header = locale('weighstation.hazmat_placard_header'),
+        content = locale('weighstation.hazmat_placard_content'):format(tostring(placardClass), tostring(unNumber)),
         centered = true,
         cancel = false,
     })
@@ -119,7 +116,7 @@ local function DoHazmatPlacardCheck(activeLoad)
     -- Placard check progress bar
     local success = lib.progressBar({
         duration = 4000,
-        label = 'DOT inspector verifying HAZMAT placards',
+        label = locale('weighstation.hazmat_verifying_label'),
         useWhileDead = false,
         canCancel = false,
         disable = {
@@ -130,8 +127,8 @@ local function DoHazmatPlacardCheck(activeLoad)
     })
 
     lib.notify({
-        title = 'HAZMAT Check',
-        description = 'Placards verified and documented.',
+        title = locale('weighstation.hazmat_check_title'),
+        description = locale('weighstation.hazmat_check_verified'),
         type = 'success',
         duration = 4000,
     })
@@ -148,11 +145,8 @@ local function DoColdChainTempCheck(activeLoad)
     local currentTemp = activeLoad.current_temp_f or 'Reading...'
 
     local result = lib.alertDialog({
-        header = 'Temperature Compliance Check',
-        content = 'DOT Inspector is checking reefer temperature compliance.\n\n'
-            .. '**Required Range:** ' .. tostring(tempMin) .. 'F - ' .. tostring(tempMax) .. 'F\n'
-            .. '**Current Reading:** ' .. tostring(currentTemp) .. 'F\n\n'
-            .. 'Inspector notes temperature reading in inspection log.',
+        header = locale('weighstation.temp_compliance_header'),
+        content = locale('weighstation.temp_compliance_content'):format(tostring(tempMin), tostring(tempMax), tostring(currentTemp)),
         centered = true,
         cancel = false,
     })
@@ -160,7 +154,7 @@ local function DoColdChainTempCheck(activeLoad)
     -- Temp check progress bar
     local success = lib.progressBar({
         duration = 3000,
-        label = 'DOT inspector checking reefer temperature log',
+        label = locale('weighstation.temp_checking_label'),
         useWhileDead = false,
         canCancel = false,
         disable = {
@@ -171,8 +165,8 @@ local function DoColdChainTempCheck(activeLoad)
     })
 
     lib.notify({
-        title = 'Temperature Check',
-        description = 'Reefer log reviewed and documented.',
+        title = locale('weighstation.temp_check_title'),
+        description = locale('weighstation.temp_check_verified'),
         type = 'success',
         duration = 4000,
     })
@@ -188,8 +182,8 @@ local function RunInspection(stationId, stationLabel)
     if not ActiveLoad then return end
     if stationsStamped[stationId] then
         lib.notify({
-            title = 'Weigh Station',
-            description = 'Already stamped at ' .. stationLabel .. ' for this load.',
+            title = locale('weighstation.title'),
+            description = locale('weighstation.already_stamped_at'):format(stationLabel),
             type = 'inform',
         })
         return
@@ -204,15 +198,15 @@ local function RunInspection(stationId, stationLabel)
     end
 
     lib.notify({
-        title = 'Weigh Station',
-        description = 'Pulling onto scale at ' .. stationLabel,
+        title = locale('weighstation.title'),
+        description = locale('weighstation.pulling_onto_scale'):format(stationLabel),
         type = 'inform',
     })
 
     -- Main DOT inspection progress bar (8 seconds)
     local success = lib.progressBar({
         duration = 8000,
-        label = 'DOT inspector reviewing documentation',
+        label = locale('weighstation.dot_reviewing'),
         useWhileDead = false,
         canCancel = true,
         disable = {
@@ -229,8 +223,8 @@ local function RunInspection(stationId, stationLabel)
 
     if not success then
         lib.notify({
-            title = 'Inspection Cancelled',
-            description = 'You left the inspection area.',
+            title = locale('weighstation.inspection_cancelled_title'),
+            description = locale('weighstation.left_inspection_area'),
             type = 'warning',
         })
         inspectionInProgress = false
@@ -253,8 +247,8 @@ local function RunInspection(stationId, stationLabel)
     stationsStamped[stationId] = true
 
     lib.notify({
-        title = 'Weigh Station Stamp Issued',
-        description = 'Weigh station stamp issued -- +5% compliance bonus',
+        title = locale('weighstation.stamp_issued_title'),
+        description = locale('weighstation.stamp_issued_desc'),
         type = 'success',
         duration = 6000,
     })
@@ -289,13 +283,13 @@ local function CreateStationZones()
                 currentStationLabel = station.label
 
                 if stationsStamped[station.id] then
-                    lib.showTextUI('Weigh Station ' .. station.label .. ' — Already stamped', {
+                    lib.showTextUI(locale('weighstation.already_stamped_label'):format(station.label), {
                         position = 'right-center',
                         icon = 'check',
                     })
                     textUIShowing = true
                 else
-                    lib.showTextUI('[E] Pull onto scale — ' .. station.label, {
+                    lib.showTextUI(locale('weighstation.pull_onto_scale_prompt'):format(station.label), {
                         position = 'right-center',
                         icon = 'weight-hanging',
                     })
@@ -382,9 +376,8 @@ function RouteToNearestWeighStation(destCoords)
     if nearestStation then
         SetNewWaypoint(nearestStation.coords.x, nearestStation.coords.y)
         lib.notify({
-            title = 'Weigh Station Required',
-            description = 'GPS set to ' .. nearestStation.label
-                .. ' — mandatory for Tier ' .. tier .. ' loads.',
+            title = locale('weighstation.required_title'),
+            description = locale('weighstation.gps_set_mandatory'):format(nearestStation.label, tier),
             type = 'inform',
             duration = 6000,
         })

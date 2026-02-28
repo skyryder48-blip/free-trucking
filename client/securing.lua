@@ -145,8 +145,8 @@ local function DoStrapPoint(pointNumber, vehicle, offsets)
     -- Check proximity — player must be near the strap point
     if dist > 3.0 then
         lib.notify({
-            title = 'Cargo Securing',
-            description = 'Move closer to strap point #' .. pointNumber,
+            title = locale('securing.title'),
+            description = locale('securing.move_closer_to_strap'):format(pointNumber),
             type = 'inform',
         })
         return false
@@ -156,7 +156,7 @@ local function DoStrapPoint(pointNumber, vehicle, offsets)
 
     local success = lib.progressBar({
         duration = strapDuration,
-        label = 'Securing strap point ' .. pointNumber .. '/' .. totalStrapPoints,
+        label = locale('securing.securing_strap_label'):format(pointNumber, totalStrapPoints),
         useWhileDead = false,
         canCancel = true,
         disable = {
@@ -176,8 +176,8 @@ local function DoStrapPoint(pointNumber, vehicle, offsets)
         TriggerServerEvent('trucking:server:strapComplete', securingBolId, pointNumber)
 
         lib.notify({
-            title = 'Strap Secured',
-            description = 'Point ' .. pointNumber .. '/' .. totalStrapPoints .. ' secured.',
+            title = locale('securing.strap_secured_title'),
+            description = locale('securing.strap_secured_desc'):format(pointNumber, totalStrapPoints),
             type = 'success',
             duration = 3000,
         })
@@ -187,8 +187,8 @@ local function DoStrapPoint(pointNumber, vehicle, offsets)
         return true
     else
         lib.notify({
-            title = 'Strap Cancelled',
-            description = 'Strap point ' .. pointNumber .. ' was not secured.',
+            title = locale('securing.strap_cancelled_title'),
+            description = locale('securing.strap_not_secured'):format(pointNumber),
             type = 'warning',
         })
         return false
@@ -208,8 +208,8 @@ local function DoWheelChock(vehicle)
 
     if dist > 3.0 then
         lib.notify({
-            title = 'Cargo Securing',
-            description = 'Move closer to the wheel chock position.',
+            title = locale('securing.title'),
+            description = locale('securing.move_closer_to_chock'),
             type = 'inform',
         })
         return false
@@ -217,7 +217,7 @@ local function DoWheelChock(vehicle)
 
     local success = lib.progressBar({
         duration = Config.StrapDurationMs or 4000,
-        label = 'Installing wheel chocks',
+        label = locale('securing.installing_chocks_label'),
         useWhileDead = false,
         canCancel = true,
         disable = {
@@ -237,16 +237,16 @@ local function DoWheelChock(vehicle)
         TriggerServerEvent('trucking:server:wheelChockComplete', securingBolId)
 
         lib.notify({
-            title = 'Wheel Chocks Installed',
-            description = 'All securing points complete.',
+            title = locale('securing.chocks_installed_title'),
+            description = locale('securing.all_points_complete'),
             type = 'success',
             duration = 3000,
         })
         return true
     else
         lib.notify({
-            title = 'Wheel Chock Cancelled',
-            description = 'Wheel chock installation was interrupted.',
+            title = locale('securing.chock_cancelled_title'),
+            description = locale('securing.chock_interrupted'),
             type = 'warning',
         })
         return false
@@ -285,10 +285,8 @@ local function RunSecuringSequence(activeLoad, vehicle)
     wheelChockComplete = false
 
     lib.notify({
-        title = 'Cargo Securing Required',
-        description = totalStrapPoints .. ' strap points to secure.'
-            .. (needsWheelChock and ' Wheel chock required.' or '')
-            .. '\nApproach each green marker.',
+        title = locale('securing.required_title'),
+        description = locale('securing.required_desc'):format(totalStrapPoints, needsWheelChock and locale('securing.wheel_chock_required') or ''),
         type = 'inform',
         duration = 8000,
     })

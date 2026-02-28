@@ -206,17 +206,16 @@ RegisterNetEvent('trucking:client:cdlTestResult', function(data)
 
     if data.passed then
         lib.notify({
-            title = 'CDL Written Test',
-            description = 'Passed! Score: ' .. (data.score or 0) .. '%'
-                .. (data.practicalRequired and ' — Practical exam now available.' or ''),
+            title = locale('cdl.written_test_title'),
+            description = locale('cdl.written_test_passed'):format(data.score or 0)
+                .. (data.practicalRequired and (' — ' .. locale('cdl.practical_now_available')) or ''),
             type = 'success',
             duration = 8000,
         })
     else
         lib.notify({
-            title = 'CDL Written Test',
-            description = 'Failed. Score: ' .. (data.score or 0) .. '%'
-                .. '. Attempts remaining: ' .. (data.attemptsRemaining or 0),
+            title = locale('cdl.written_test_title'),
+            description = locale('cdl.written_test_failed'):format(data.score or 0, data.attemptsRemaining or 0),
             type = 'error',
             duration = 8000,
         })
@@ -224,9 +223,8 @@ RegisterNetEvent('trucking:client:cdlTestResult', function(data)
         -- Handle lockout
         if data.lockedOut then
             lib.notify({
-                title = 'CDL Office',
-                description = 'Maximum attempts reached. Locked for '
-                    .. (Config.CDLWrittenLockoutMinutes or 60) .. ' minutes.',
+                title = locale('cdl.office_title'),
+                description = locale('cdl.max_attempts_locked'):format(Config.CDLWrittenLockoutMinutes or 60),
                 type = 'error',
                 duration = 10000,
             })
@@ -317,8 +315,8 @@ local function RunStage1()
     currentStage = 1
 
     lib.notify({
-        title = 'CDL Tutorial — Stage 1',
-        description = 'Pre-Trip Inspection: Check 5 points around the truck.',
+        title = locale('cdl.tutorial_stage_title'):format(1),
+        description = locale('cdl.stage1_desc'),
         type = 'inform',
         duration = 8000,
     })
@@ -334,7 +332,7 @@ local function RunStage1()
         if not tutorialActive then return false end
 
         lib.notify({
-            title = 'Inspection Point ' .. i .. '/' .. #PRE_TRIP_CHECKPOINTS,
+            title = locale('cdl.inspection_point'):format(i, #PRE_TRIP_CHECKPOINTS),
             description = checkpoint.label,
             type = 'inform',
             duration = 4000,
@@ -354,8 +352,8 @@ local function RunStage1()
 
         if not success then
             lib.notify({
-                title = 'Pre-Trip',
-                description = 'Point skipped — that is okay during training.',
+                title = locale('cdl.pre_trip_title'),
+                description = locale('cdl.point_skipped_training'),
                 type = 'inform',
             })
             -- Forgiving: continue even if cancelled
@@ -365,8 +363,8 @@ local function RunStage1()
     end
 
     lib.notify({
-        title = 'Stage 1 Complete',
-        description = 'Pre-trip inspection finished. Proceed to Stage 2.',
+        title = locale('cdl.stage_complete'):format(1),
+        description = locale('cdl.stage1_complete_desc'),
         type = 'success',
         duration = 5000,
     })
@@ -381,16 +379,16 @@ local function RunStage2()
     currentStage = 2
 
     lib.notify({
-        title = 'CDL Tutorial — Stage 2',
-        description = 'Coupling: Attach trailer, apply seal, secure 3 strap points.',
+        title = locale('cdl.tutorial_stage_title'):format(2),
+        description = locale('cdl.stage2_desc'),
         type = 'inform',
         duration = 8000,
     })
 
     -- Coupling zone interaction
     lib.notify({
-        title = 'Step 1',
-        description = 'Back up to the trailer to couple.',
+        title = locale('cdl.step_title'):format(1),
+        description = locale('cdl.back_up_to_couple'),
         type = 'inform',
         duration = 5000,
     })
@@ -405,8 +403,8 @@ local function RunStage2()
         Wait(1000)
         if GetGameTimer() > couplingTimeout then
             lib.notify({
-                title = 'Coupling',
-                description = 'Taking too long. Auto-coupling for training.',
+                title = locale('cdl.coupling_title'),
+                description = locale('cdl.auto_coupling_timeout'),
                 type = 'inform',
             })
             couplingComplete = true
@@ -428,8 +426,8 @@ local function RunStage2()
                     attempts = attempts + 1
                     if attempts >= MAX_COUPLING_ATTEMPTS then
                         lib.notify({
-                            title = 'Coupling',
-                            description = 'Auto-coupling for training purposes.',
+                            title = locale('cdl.coupling_title'),
+                            description = locale('cdl.auto_coupling_training'),
                             type = 'inform',
                         })
                         couplingComplete = true
@@ -442,15 +440,15 @@ local function RunStage2()
     if not tutorialActive then return false end
 
     lib.notify({
-        title = 'Trailer Coupled',
-        description = 'Now apply the seal.',
+        title = locale('cdl.trailer_coupled'),
+        description = locale('cdl.seal_the_trailer'),
         type = 'success',
     })
 
     -- Seal application
     local sealSuccess = lib.progressBar({
         duration = 3000,
-        label = 'Applying trailer seal',
+        label = locale('cdl.applying_seal'),
         useWhileDead = false,
         canCancel = true,
         anim = {
@@ -461,7 +459,7 @@ local function RunStage2()
     })
 
     if sealSuccess then
-        lib.notify({ title = 'Seal Applied', description = 'Seal number recorded.', type = 'success' })
+        lib.notify({ title = locale('cdl.seal_applied'), description = locale('cdl.seal_number_recorded'), type = 'success' })
     end
 
     -- 3 strap points
@@ -470,7 +468,7 @@ local function RunStage2()
 
         local strapSuccess = lib.progressBar({
             duration = 4000,
-            label = 'Securing strap point ' .. i .. '/' .. COUPLING_STRAP_POINTS,
+            label = locale('cdl.securing_strap'):format(i, COUPLING_STRAP_POINTS),
             useWhileDead = false,
             canCancel = true,
             anim = {
@@ -482,8 +480,8 @@ local function RunStage2()
 
         if strapSuccess then
             lib.notify({
-                title = 'Strap ' .. i .. ' Secured',
-                description = 'Point ' .. i .. '/' .. COUPLING_STRAP_POINTS .. ' complete.',
+                title = locale('cdl.strap_point_secured_title'):format(i),
+                description = locale('cdl.strap_point_complete'):format(i, COUPLING_STRAP_POINTS),
                 type = 'success',
                 duration = 2000,
             })
@@ -492,8 +490,8 @@ local function RunStage2()
     end
 
     lib.notify({
-        title = 'Stage 2 Complete',
-        description = 'Coupling and securing finished. Proceed to Stage 3.',
+        title = locale('cdl.stage_complete'):format(2),
+        description = locale('cdl.stage2_complete_desc'),
         type = 'success',
         duration = 5000,
     })
@@ -509,9 +507,8 @@ local function RunStage3()
     local route = TUTORIAL_ROUTES[3]
 
     lib.notify({
-        title = 'CDL Tutorial — Stage 3',
-        description = 'City Navigation: Drive from LSIA to Industrial District.\n'
-            .. 'Watch your speed and stay on the road.',
+        title = locale('cdl.tutorial_stage_title'):format(3),
+        description = locale('cdl.stage3_desc'),
         type = 'inform',
         duration = 10000,
     })
@@ -535,8 +532,8 @@ local function RunStage3()
                     speedViolations = speedViolations + 1
                     if speedViolations % 10 == 1 then -- notify every ~5 seconds
                         lib.notify({
-                            title = 'Speed Warning',
-                            description = 'Slow down! City speed limit applies.',
+                            title = locale('cdl.speed_warning_title'),
+                            description = locale('cdl.speed_warning_desc'),
                             type = 'warning',
                             duration = 3000,
                         })
@@ -563,16 +560,16 @@ local function RunStage3()
 
     if speedViolations > 20 then
         lib.notify({
-            title = 'Stage 3 Note',
-            description = 'Multiple speed violations noted. Work on speed control.',
+            title = locale('cdl.stage3_note_title'),
+            description = locale('cdl.stage3_note_desc'),
             type = 'warning',
             duration = 6000,
         })
     end
 
     lib.notify({
-        title = 'Stage 3 Complete',
-        description = 'City navigation finished. Proceed to Stage 4 — Highway Run.',
+        title = locale('cdl.stage_complete'):format(3),
+        description = locale('cdl.stage3_complete_desc'),
         type = 'success',
         duration = 5000,
     })
@@ -588,9 +585,8 @@ local function RunStage4()
     local route = TUTORIAL_ROUTES[4]
 
     lib.notify({
-        title = 'CDL Tutorial — Stage 4',
-        description = 'Highway Run: Industrial to Harmony Truck Stop.\n'
-            .. 'Introducing weight multipliers and delivery windows.',
+        title = locale('cdl.tutorial_stage_title'):format(4),
+        description = locale('cdl.stage4_desc'),
         type = 'inform',
         duration = 10000,
     })
@@ -622,8 +618,8 @@ local function RunStage4()
     if not tutorialActive then return false end
 
     lib.notify({
-        title = 'Stage 4 Complete',
-        description = 'Highway run finished. Final stage: Backing and Dock.',
+        title = locale('cdl.stage_complete'):format(4),
+        description = locale('cdl.stage4_complete_desc'),
         type = 'success',
         duration = 5000,
     })
@@ -639,9 +635,8 @@ local function RunStage5()
     backingAttempts = 0
 
     lib.notify({
-        title = 'CDL Tutorial — Stage 5',
-        description = 'Backing and Dock: Back the trailer into the dock zone.\n'
-            .. 'You have ' .. MAX_BACKING_ATTEMPTS .. ' attempts.',
+        title = locale('cdl.tutorial_stage_title'):format(5),
+        description = locale('cdl.stage5_desc'):format(MAX_BACKING_ATTEMPTS),
         type = 'inform',
         duration = 10000,
     })
@@ -690,8 +685,8 @@ local function RunStage5()
 
     if dockSuccess then
         lib.notify({
-            title = 'Docking Successful',
-            description = 'Trailer is in the dock zone. Signing BOL...',
+            title = locale('cdl.docking_successful'),
+            description = locale('cdl.docking_signing_bol'),
             type = 'success',
             duration = 5000,
         })
@@ -699,7 +694,7 @@ local function RunStage5()
         -- BOL signing interaction
         local bolSuccess = lib.progressBar({
             duration = 3000,
-            label = 'Signing Bill of Lading',
+            label = locale('cdl.signing_bol'),
             useWhileDead = false,
             canCancel = false,
             anim = {
@@ -710,8 +705,8 @@ local function RunStage5()
         })
 
         lib.notify({
-            title = 'Stage 5 Complete — CDL Tutorial Finished!',
-            description = 'Class A CDL issued. Payout: $850',
+            title = locale('cdl.stage5_complete_title'),
+            description = locale('cdl.stage5_complete_desc'),
             type = 'success',
             duration = 10000,
         })
@@ -722,8 +717,8 @@ local function RunStage5()
         TriggerServerEvent('trucking:server:tutorialComplete')
     else
         lib.notify({
-            title = 'Docking',
-            description = 'All attempts used. The examiner will let you retry later.',
+            title = locale('cdl.docking_title'),
+            description = locale('cdl.all_attempts_used'),
             type = 'warning',
             duration = 8000,
         })
@@ -745,8 +740,8 @@ local function RunFullTutorial()
     currentStage = 0
 
     lib.notify({
-        title = 'CDL Practical Exam',
-        description = 'Starting Class A CDL practical exam. 5 stages, ~20 minutes.',
+        title = locale('cdl.practical_exam_title'),
+        description = locale('cdl.practical_exam_desc'),
         type = 'inform',
         duration = 10000,
     })
@@ -755,8 +750,8 @@ local function RunFullTutorial()
     tutorialVehicle, tutorialTrailer = SpawnTutorialVehicles()
     if not tutorialVehicle then
         lib.notify({
-            title = 'CDL Tutorial',
-            description = 'Failed to spawn tutorial vehicle. Try again.',
+            title = locale('cdl.tutorial_title'),
+            description = locale('cdl.spawn_failed'),
             type = 'error',
         })
         tutorialActive = false
@@ -819,47 +814,43 @@ end
 local function ShowLSDOTMenu()
     lib.registerContext({
         id = 'lsdot_cdl_menu',
-        title = 'LSDOT — Commercial Driver Licensing',
+        title = locale('cdl.lsdot_menu_title'),
         options = {
             {
-                title = 'Class B CDL — Written Test',
-                description = 'Fee: $' .. (Config.CDLFees and Config.CDLFees.class_b or 500)
-                    .. ' | 10 questions, 80% to pass',
+                title = locale('cdl.class_b_written_title'),
+                description = locale('cdl.written_test_desc'):format(Config.CDLFees and Config.CDLFees.class_b or 500, 10, 80),
                 icon = 'file-alt',
                 onSelect = function()
                     OpenWrittenTest('class_b')
                 end,
             },
             {
-                title = 'Class A CDL — Written Test',
-                description = 'Fee: $' .. (Config.CDLFees and Config.CDLFees.class_a or 1500)
-                    .. ' | 10 questions, 80% to pass',
+                title = locale('cdl.class_a_written_title'),
+                description = locale('cdl.written_test_desc'):format(Config.CDLFees and Config.CDLFees.class_a or 1500, 10, 80),
                 icon = 'file-alt',
                 onSelect = function()
                     OpenWrittenTest('class_a')
                 end,
             },
             {
-                title = 'Class A CDL — Practical Exam (Tutorial)',
-                description = '5 stages, ~20 minutes. $850 payout on completion.',
+                title = locale('cdl.class_a_practical_title'),
+                description = locale('cdl.class_a_practical_desc'),
                 icon = 'truck',
                 onSelect = function()
                     RunFullTutorial()
                 end,
             },
             {
-                title = 'Tanker Endorsement — Written Test',
-                description = 'Fee: $' .. (Config.CDLFees and Config.CDLFees.tanker or 800)
-                    .. ' | 15 questions, 80% to pass',
+                title = locale('cdl.tanker_endorsement_title'),
+                description = locale('cdl.tanker_endorsement_desc'):format(Config.CDLFees and Config.CDLFees.tanker or 800, 15, 80),
                 icon = 'gas-pump',
                 onSelect = function()
                     OpenWrittenTest('tanker')
                 end,
             },
             {
-                title = 'HAZMAT Endorsement — Safety Briefing',
-                description = 'Fee: $' .. (Config.CDLFees and Config.CDLFees.hazmat or 1200)
-                    .. ' + $500 background. Completion grants endorsement.',
+                title = locale('cdl.hazmat_endorsement_title'),
+                description = locale('cdl.hazmat_endorsement_desc'):format(Config.CDLFees and Config.CDLFees.hazmat or 1200),
                 icon = 'radiation',
                 onSelect = function()
                     if cdlTestActive then return end
@@ -897,7 +888,7 @@ CreateThread(function()
                 nearLSDOT = true
                 if not lsdotTextUIShowing then
                     lsdotTextUIShowing = true
-                    lib.showTextUI('[E] LSDOT — CDL Office', {
+                    lib.showTextUI(locale('cdl.lsdot_prompt'), {
                         position = 'right-center',
                         icon = 'id-card',
                     })
@@ -951,8 +942,8 @@ function CancelTutorial()
     SendNUIMessage({ action = 'tutorialHUD', data = { stage = 0 } })
 
     lib.notify({
-        title = 'CDL Tutorial',
-        description = 'Tutorial cancelled.',
+        title = locale('cdl.tutorial_title'),
+        description = locale('cdl.tutorial_cancelled'),
         type = 'inform',
     })
 end
@@ -971,8 +962,8 @@ end
 RegisterNetEvent('trucking:client:cdlIssued', function(data)
     if not data then return end
     lib.notify({
-        title = 'CDL Issued',
-        description = data.licenseType .. ' CDL has been issued to your profile.',
+        title = locale('cdl.cdl_issued_title'),
+        description = locale('cdl.cdl_issued_desc'):format(data.licenseType),
         type = 'success',
         duration = 8000,
     })
@@ -982,8 +973,8 @@ end)
 RegisterNetEvent('trucking:client:tutorialPayout', function(data)
     if not data then return end
     lib.notify({
-        title = 'Tutorial Payout',
-        description = '$' .. (data.amount or 850) .. ' deposited to your account.',
+        title = locale('cdl.tutorial_payout_title'),
+        description = locale('cdl.tutorial_payout_desc'):format(data.amount or 850),
         type = 'success',
         duration = 8000,
     })
@@ -1003,15 +994,15 @@ RegisterNetEvent('trucking:client:certApplicationResult', function(data)
     if not data then return end
     if data.success then
         lib.notify({
-            title = 'Certification',
-            description = (data.certType or 'Endorsement') .. ' has been added to your CDL.',
+            title = locale('cdl.certification_title'),
+            description = locale('cdl.certification_added'):format(data.certType or locale('cdl.endorsement')),
             type = 'success',
             duration = 6000,
         })
     else
         lib.notify({
-            title = 'Certification Failed',
-            description = data.reason or 'Application was not approved.',
+            title = locale('cdl.certification_failed_title'),
+            description = data.reason or locale('cdl.application_not_approved'),
             type = 'error',
         })
     end
@@ -1042,15 +1033,15 @@ RegisterNetEvent('trucking:client:testResults', function(data)
         or 0
     if data.passed then
         lib.notify({
-            title = 'Test Passed',
-            description = 'Score: ' .. scorePct .. '% — License updated.',
+            title = locale('cdl.test_passed_title'),
+            description = locale('cdl.test_passed_desc'):format(scorePct),
             type = 'success',
             duration = 8000,
         })
     else
         lib.notify({
-            title = 'Test Failed',
-            description = 'Score: ' .. scorePct .. '%. Try again later.',
+            title = locale('cdl.test_failed_title'),
+            description = locale('cdl.test_failed_desc'):format(scorePct),
             type = 'error',
             duration = 8000,
         })
@@ -1061,8 +1052,8 @@ end)
 RegisterNetEvent('trucking:client:cdlTestFailed', function(reason)
     cdlTestActive = false
     lib.notify({
-        title = 'CDL Test',
-        description = reason or 'Unable to start test.',
+        title = locale('cdl.cdl_test_title'),
+        description = reason or locale('cdl.unable_to_start_test'),
         type = 'error',
     })
 end)

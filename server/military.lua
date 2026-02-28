@@ -31,32 +31,28 @@ local ESCORT_UNGUARDED_WINDOW  = 90   -- seconds after both escorts destroyed
 local ESCORT_SPEED             = 40.0 -- mph formation speed
 
 --- Military cargo loot tables (Section 26.4)
+--- Uses standard GTA armor and weapons from ox_inventory.
 local MilitaryCargo = {
     equipment_transport = {
-        { item = 'military_armor_vest',     weight = 15, chance = 0.70 },
-        { item = 'military_ammunition_box', weight = 20, chance = 0.80 },
-        { item = 'military_vehicle_parts',  weight = 25, chance = 0.60 },
-        { item = 'military_pistol',         weight = 5,  chance = 0.50 },
+        { item = 'armour',              weight = 5,  chance = 0.70 },
+        { item = 'ammo-9',             weight = 1,  chance = 0.80 },
+        { item = 'weapon_pistol',      weight = 3,  chance = 0.50 },
     },
     armory_transfer = {
-        { item = 'military_armor_vest',       weight = 15, chance = 0.70 },
-        { item = 'military_ammunition_box',   weight = 20, chance = 0.80 },
-        { item = 'military_vehicle_parts',    weight = 25, chance = 0.60 },
-        { item = 'military_pistol',           weight = 5,  chance = 0.50 },
-        { item = 'military_rifle',            weight = 8,  chance = 0.60 },
-        { item = 'military_explosive_charge', weight = 4,  chance = 0.30 },
-        { item = 'classified_documents',      weight = 1,  chance = 0.10 },
+        { item = 'armour',              weight = 5,  chance = 0.70 },
+        { item = 'ammo-9',             weight = 1,  chance = 0.80 },
+        { item = 'ammo-rifle',         weight = 2,  chance = 0.60 },
+        { item = 'weapon_pistol',      weight = 3,  chance = 0.50 },
+        { item = 'weapon_carbinerifle', weight = 8, chance = 0.60 },
     },
     restricted_munitions = {
-        { item = 'military_armor_vest',         weight = 15, chance = 0.70 },
-        { item = 'military_ammunition_box',     weight = 20, chance = 0.80 },
-        { item = 'military_vehicle_parts',      weight = 25, chance = 0.60 },
-        { item = 'military_pistol',             weight = 5,  chance = 0.50 },
-        { item = 'military_rifle',              weight = 8,  chance = 0.60 },
-        { item = 'military_explosive_charge',   weight = 4,  chance = 0.30 },
-        { item = 'classified_documents',        weight = 1,  chance = 0.10 },
-        { item = 'military_rifle_suppressed',   weight = 6,  chance = 0.40 },
-        { item = 'military_lmg',                weight = 12, chance = 0.25 },
+        { item = 'armour',              weight = 5,  chance = 0.70 },
+        { item = 'ammo-9',             weight = 1,  chance = 0.80 },
+        { item = 'ammo-rifle',         weight = 2,  chance = 0.60 },
+        { item = 'weapon_pistol',      weight = 3,  chance = 0.50 },
+        { item = 'weapon_carbinerifle', weight = 8, chance = 0.60 },
+        { item = 'weapon_specialcarbine', weight = 8, chance = 0.40 },
+        { item = 'weapon_combatmg',    weight = 10, chance = 0.25 },
     },
 }
 
@@ -172,8 +168,8 @@ local function GenerateMilitaryLoot(classification)
         local roll = math.random()
         if roll <= entry.chance then
             local amount = 1
-            -- Some items can drop multiples
-            if entry.item == 'military_ammunition_box' then
+            -- Ammo items can drop multiples
+            if entry.item == 'ammo-9' or entry.item == 'ammo-rifle' then
                 amount = math.random(1, 3)
             end
 
