@@ -40,9 +40,9 @@ export async function fetchNUI(eventName, data = {}) {
  */
 export function onNUIMessage(callback) {
   function handler(event) {
-    const { action, ...data } = event.data;
+    const { action, data, ...rest } = event.data;
     if (action) {
-      callback(action, data);
+      callback(action, data || rest);
     }
   }
 
