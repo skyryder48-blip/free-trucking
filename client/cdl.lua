@@ -978,6 +978,82 @@ RegisterNetEvent('trucking:client:tutorialPayout', function(data)
     })
 end)
 
+--- Server sends credential/profile data (CDL status, licenses held)
+RegisterNetEvent('trucking:client:credentials', function(data)
+    if not data then return end
+    SendNUIMessage({
+        action = 'credentials',
+        data = data,
+    })
+end)
+
+--- Server confirms cert application result (endorsement applied)
+RegisterNetEvent('trucking:client:certApplicationResult', function(data)
+    if not data then return end
+    if data.success then
+        lib.notify({
+            title = 'Certification',
+            description = (data.certType or 'Endorsement') .. ' has been added to your CDL.',
+            type = 'success',
+            duration = 6000,
+        })
+    else
+        lib.notify({
+            title = 'Certification Failed',
+            description = data.reason or 'Application was not approved.',
+            type = 'error',
+        })
+    end
+end)
+
+--- Server starts the HAZMAT safety briefing
+RegisterNetEvent('trucking:client:hazmatBriefingStarted', function(data)
+    if not data then return end
+    cdlTestActive = true
+    SendNUIMessage({
+        action = 'openHazmatBriefing',
+        data = data,
+    })
+    SetNuiFocus(true, true)
+end)
+
+--- Server sends test results (grade/score)
+RegisterNetEvent('trucking:client:testResults', function(data)
+    if not data then return end
+    cdlTestActive = false
+    SetNuiFocus(false, false)
+    SendNUIMessage({
+        action = 'testResults',
+        data = data,
+    })
+    if data.passed then
+        lib.notify({
+            title = 'Test Passed',
+            description = 'Score: ' .. (data.score or 0) .. '% — License updated.',
+            type = 'success',
+            duration = 8000,
+        })
+    else
+        lib.notify({
+            title = 'Test Failed',
+            description = 'Score: ' .. (data.score or 0) .. '%. Try again later.',
+            type = 'error',
+            duration = 8000,
+        })
+    end
+end)
+
+--- Server confirms written test has started (questions sent separately)
+RegisterNetEvent('trucking:client:writtenTestStarted', function(data)
+    if not data then return end
+    cdlTestActive = true
+    lib.notify({
+        title = 'CDL Written Test',
+        description = 'Test starting — ' .. (data.questionCount or 10) .. ' questions.',
+        type = 'inform',
+    })
+end)
+
 --- Stop all monitoring on state cleanup.
 AddEventHandler('trucking:client:stopAllMonitoring', function()
     CancelTutorial()

@@ -270,6 +270,44 @@ RegisterNetEvent('trucking:client:excursionUpdate', function(data)
     })
 end)
 
+--- Server notifies that a temperature excursion has started
+RegisterNetEvent('trucking:client:excursionStarted', function(data)
+    if not data then return end
+    lib.notify({
+        title = 'Temperature Excursion',
+        description = 'Excursion started — reefer is out of range. Timer running.',
+        type = 'warning',
+        duration = 8000,
+    })
+    SendNUIMessage({
+        action = 'excursionStarted',
+        data = data,
+    })
+end)
+
+--- Server notifies that a temperature excursion has ended
+RegisterNetEvent('trucking:client:excursionEnded', function(data)
+    if not data then return end
+    lib.notify({
+        title = 'Excursion Resolved',
+        description = 'Temperature back in range. Excursion timer stopped.',
+        type = 'success',
+    })
+    SendNUIMessage({
+        action = 'excursionEnded',
+        data = data,
+    })
+end)
+
+--- Server sends current excursion status data
+RegisterNetEvent('trucking:client:excursionStatus', function(data)
+    if not data then return end
+    SendNUIMessage({
+        action = 'excursionStatus',
+        data = data,
+    })
+end)
+
 -- ─────────────────────────────────────────────
 -- RESOURCE CLEANUP
 -- ─────────────────────────────────────────────

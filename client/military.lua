@@ -629,6 +629,22 @@ RegisterNetEvent('trucking:client:militaryContractFailed', function(reason)
     })
 end)
 
+--- Server requests spawning the military convoy escort
+RegisterNetEvent('trucking:client:spawnMilitaryConvoy', function(data)
+    if not data or not data.loadId then return end
+    StartConvoy(data.loadId, data.route)
+end)
+
+--- Server requests despawning the military convoy
+RegisterNetEvent('trucking:client:despawnMilitaryConvoy', function()
+    StopConvoy()
+end)
+
+--- Server notifies escorts to investigate player position
+RegisterNetEvent('trucking:client:escortsInvestigate', function()
+    TaskEscortsInvestigate()
+end)
+
 -- ═══════════════════════════════════════════════════════════════
 -- CLEANUP
 -- ═══════════════════════════════════════════════════════════════

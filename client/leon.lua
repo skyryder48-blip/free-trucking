@@ -453,6 +453,32 @@ RegisterNetEvent('trucking:client:leonLoadRevealed', function(data)
     ShowLeonLoadDetails(data)
 end)
 
+--- Server sends Leon board display (alternative event name)
+RegisterNetEvent('trucking:client:showLeonBoard', function(loads)
+    leonBoardData = loads
+    ShowLeonBoard(loads)
+end)
+
+--- Server assigns a Leon load directly (server-initiated)
+RegisterNetEvent('trucking:client:leonLoadAssigned', function(data)
+    if not data then return end
+    activeLeonLoad = data
+    if data.origin_coords then
+        local coords = data.origin_coords
+        if type(coords) == 'table' then
+            SetNewWaypoint(coords.x or coords[1], coords.y or coords[2])
+        elseif type(coords) == 'vector3' then
+            SetNewWaypoint(coords.x, coords.y)
+        end
+    end
+    lib.notify({
+        title       = 'Leon',
+        description = '"Got something for you. Pick it up."',
+        type        = 'inform',
+        duration    = 8000,
+    })
+end)
+
 --- Leon load accepted — set GPS to pickup (no delivery GPS).
 RegisterNetEvent('trucking:client:leonLoadAccepted', function(data)
     if not data then return end

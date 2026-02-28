@@ -186,6 +186,29 @@ RegisterNetEvent('trucking:client:boardRefresh', function(data)
     })
 end)
 
+--- Server sends board data after opening board (from terminal or shipper)
+RegisterNetEvent('trucking:client:showBoard', function(data)
+    if not data then return end
+    SendNUIMessage({
+        action = 'showBoard',
+        data = data,
+    })
+    if Config.UseStandaloneNUI and not IsTruckingNUIOpen() then
+        OpenTruckingNUI()
+    end
+end)
+
+--- Delivery window has expired
+RegisterNetEvent('trucking:client:windowExpired', function(data)
+    if not ActiveLoad then return end
+    lib.notify({
+        title = 'Delivery Window Expired',
+        description = 'BOL #' .. (ActiveBOL and ActiveBOL.bol_number or '?') .. ' — Time is up!',
+        type = 'error',
+        duration = 10000,
+    })
+end)
+
 --- Transfer offer received from another driver
 RegisterNetEvent('trucking:client:transferOffer', function(data)
     if not data then return end

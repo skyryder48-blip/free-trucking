@@ -103,6 +103,7 @@ client_scripts {
     'client/hazmat.lua',
     'client/explosions.lua',
     'client/hud.lua',
+    'client/admin.lua',
 }
 
 -- ─────────────────────────────────────────────

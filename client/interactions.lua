@@ -1081,6 +1081,53 @@ RegisterNetEvent('trucking:client:weighStationResult', function(data)
     end
 end)
 
+--- Server response for insurance claim filing
+RegisterNetEvent('trucking:client:insuranceClaimResult', function(data)
+    if not data then return end
+    if data.success then
+        lib.notify({
+            title = 'Claim Filed',
+            description = 'Claim #' .. (data.claimNumber or '?') .. ' submitted. Payout pending review.',
+            type = 'success',
+            duration = 6000,
+        })
+    else
+        lib.notify({
+            title = 'Claim Denied',
+            description = data.reason or 'Unable to file claim.',
+            type = 'error',
+        })
+    end
+end)
+
+--- Server response for insurance purchase
+RegisterNetEvent('trucking:client:insurancePurchaseResult', function(data)
+    if not data then return end
+    if data.success then
+        lib.notify({
+            title = 'Insurance Purchased',
+            description = (data.policyType or 'Policy') .. ' coverage active. Cost: $' .. (data.cost or 0),
+            type = 'success',
+            duration = 6000,
+        })
+    else
+        lib.notify({
+            title = 'Purchase Failed',
+            description = data.reason or 'Unable to purchase insurance.',
+            type = 'error',
+        })
+    end
+end)
+
+--- Server response for insurance status query
+RegisterNetEvent('trucking:client:insuranceStatus', function(data)
+    if not data then return end
+    SendNUIMessage({
+        action = 'insuranceStatus',
+        data = data,
+    })
+end)
+
 -- ─────────────────────────────────────────────
 -- BOL SIGNED / DEPARTURE CONFIRMATION
 -- ─────────────────────────────────────────────
