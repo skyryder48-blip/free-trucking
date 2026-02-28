@@ -239,7 +239,7 @@ local function ShowLeonApproach()
                 iconColor   = 'orange',
                 onSelect    = function()
                     -- Request board data from server
-                    TriggerServerEvent('trucking:server:requestLeonBoard')
+                    TriggerServerEvent('trucking:server:openLeonBoard')
                 end,
             },
         },

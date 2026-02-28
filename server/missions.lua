@@ -1413,7 +1413,7 @@ RegisterNetEvent('trucking:server:sealBreak', function(bolId, reason)
     end
 
     -- Notify police script (low priority)
-    if Config and Config.PoliceResource and Config.PoliceResource ~= '' then
+    if Config and Config.PoliceResources then
         local ped = activeLoad.citizenid and GetPlayerSource(activeLoad.citizenid)
         local alertCoords = nil
         if ped then
@@ -1421,14 +1421,16 @@ RegisterNetEvent('trucking:server:sealBreak', function(bolId, reason)
             if playerPed then alertCoords = GetEntityCoords(playerPed) end
         end
 
-        pcall(function()
-            exports[Config.PoliceResource]:dispatchAlert({
-                type = 'seal_break',
-                priority = Config.SealBreakAlertPriority or 'low',
-                location = alertCoords,
-                details = 'Truck trailer seal broken - ' .. (reason or 'unknown'),
-            })
-        end)
+        for _, resourceName in ipairs(Config.PoliceResources) do
+            pcall(function()
+                exports[resourceName]:dispatchAlert({
+                    type = 'seal_break',
+                    priority = Config.SealBreakAlertPriority or 'low',
+                    location = alertCoords,
+                    details = 'Truck trailer seal broken - ' .. (reason or 'unknown'),
+                })
+            end)
+        end
     end
 
     -- Notify the player
@@ -1627,4 +1629,165 @@ RegisterNetEvent('trucking:server:weighStationStamp', function(bolId, stationDat
         description = 'Inspection passed. +5% compliance bonus.',
         type = 'success',
     })
+end)
+
+-- ═══════════════════════════════════════════════════════════════
+-- ADDITIONAL EVENT HANDLERS
+-- ═══════════════════════════════════════════════════════════════
+
+--- Player has arrived at the delivery zone (pre-delivery check)
+RegisterNetEvent('trucking:server:arrivedAtDestination', function(bolId)
+    local src = source
+    if not ValidateLoadOwner(src, bolId) then return end
+    if not RateLimitEvent(src, 'arrivedAtDest', 3000) then return end
+
+    local activeLoad = ActiveLoads[bolId]
+    if not activeLoad then return end
+
+    activeLoad.arrived_at = GetServerTime()
+    ActiveLoads[bolId] = activeLoad
+
+    DB.InsertBOLEvent({
+        bol_id = bolId,
+        citizenid = activeLoad.citizenid,
+        event_type = 'arrived_at_destination',
+    })
+end)
+
+--- Load rejected at destination (integrity too low)
+RegisterNetEvent('trucking:server:loadRejected', function(bolId)
+    local src = source
+    if not ValidateLoadOwner(src, bolId) then return end
+    if not RateLimitEvent(src, 'loadRejected', 5000) then return end
+
+    local activeLoad = ActiveLoads[bolId]
+    if not activeLoad then return end
+
+    DB.InsertBOLEvent({
+        bol_id = bolId,
+        citizenid = activeLoad.citizenid,
+        event_type = 'load_rejected',
+        event_data = { integrity = activeLoad.integrity_pct },
+    })
+
+    lib.notify(src, {
+        title = 'Load Rejected',
+        description = 'Cargo integrity too low. Payout reduced.',
+        type = 'error',
+    })
+end)
+
+--- BOL signed on load acceptance
+RegisterNetEvent('trucking:server:signBOL', function(bolId)
+    local src = source
+    if not ValidateLoadOwner(src, bolId) then return end
+    if not RateLimitEvent(src, 'signBOL', 5000) then return end
+
+    local activeLoad = ActiveLoads[bolId]
+    if not activeLoad then return end
+
+    activeLoad.bol_signed = true
+    ActiveLoads[bolId] = activeLoad
+
+    DB.InsertBOLEvent({
+        bol_id = bolId,
+        citizenid = activeLoad.citizenid,
+        event_type = 'bol_signed',
+    })
+end)
+
+--- Individual cargo securing step (per-strap)
+RegisterNetEvent('trucking:server:cargoSecured', function(bolId)
+    local src = source
+    if not ValidateLoadOwner(src, bolId) then return end
+    if not RateLimitEvent(src, 'cargoSecured', 2000) then return end
+
+    local activeLoad = ActiveLoads[bolId]
+    if not activeLoad then return end
+
+    activeLoad.straps_applied = (activeLoad.straps_applied or 0) + 1
+    ActiveLoads[bolId] = activeLoad
+end)
+
+--- All cargo securing complete
+RegisterNetEvent('trucking:server:cargoFullySecured', function(bolId)
+    local src = source
+    if not ValidateLoadOwner(src, bolId) then return end
+    if not RateLimitEvent(src, 'cargoFullySecured', 5000) then return end
+
+    local activeLoad = ActiveLoads[bolId]
+    if not activeLoad then return end
+
+    activeLoad.cargo_secured = true
+    ActiveLoads[bolId] = activeLoad
+
+    DB.InsertBOLEvent({
+        bol_id = bolId,
+        citizenid = activeLoad.citizenid,
+        event_type = 'cargo_fully_secured',
+    })
+end)
+
+--- Wheel chock placed
+RegisterNetEvent('trucking:server:wheelChockComplete', function(bolId)
+    local src = source
+    if not ValidateLoadOwner(src, bolId) then return end
+    if not RateLimitEvent(src, 'wheelChock', 5000) then return end
+
+    local activeLoad = ActiveLoads[bolId]
+    if not activeLoad then return end
+
+    activeLoad.wheel_chocked = true
+    ActiveLoads[bolId] = activeLoad
+end)
+
+--- Distress signal from active load
+RegisterNetEvent('trucking:server:distressSignal', function(bolId, data)
+    local src = source
+    if not ValidateLoadOwner(src, bolId) then return end
+    if not RateLimitEvent(src, 'distress', 30000) then return end
+
+    local activeLoad = ActiveLoads[bolId]
+    if not activeLoad then return end
+
+    if activeLoad.company_id then
+        local members = DB.GetCompanyMembers(activeLoad.company_id)
+        if members then
+            for _, member in ipairs(members) do
+                local memberSrc = GetPlayerByIdentifier(member.citizenid)
+                if memberSrc and memberSrc ~= src then
+                    TriggerClientEvent('trucking:client:distressAlert', memberSrc, {
+                        driver = activeLoad.citizenid,
+                        bolId = bolId,
+                        coords = data and data.coords,
+                    })
+                end
+            end
+        end
+    end
+
+    DB.InsertBOLEvent({
+        bol_id = bolId,
+        citizenid = activeLoad.citizenid,
+        event_type = 'distress_signal',
+        event_data = data,
+    })
+end)
+
+--- Get detailed load information for NUI display
+RegisterNetEvent('trucking:server:getLoadDetail', function(loadId)
+    local src = source
+    local player = exports.qbx_core:GetPlayer(src)
+    if not player then return end
+
+    local loadData = nil
+
+    for _, load in pairs(ActiveLoads) do
+        if load.load_id == loadId or load.bol_id == loadId then
+            loadData = load
+            break
+        end
+    end
+
+    TriggerClientEvent('trucking:client:loadDetailResponse', src, loadData)
 end)

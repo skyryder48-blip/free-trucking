@@ -211,7 +211,7 @@ RegisterNetEvent('trucking:client:openClaimInteraction', function()
                 })
 
                 if confirm == 'confirm' then
-                    TriggerServerEvent('trucking:server:filingClaim', bolNum, slot.slot)
+                    TriggerServerEvent('trucking:server:fileInsuranceClaim', bolNum, slot.slot)
                 end
             end,
         })

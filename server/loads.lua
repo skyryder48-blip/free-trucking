@@ -738,3 +738,92 @@ CreateThread(function()
         end
     end
 end)
+
+-- ═══════════════════════════════════════════════════════════════
+-- LIVESTOCK WELFARE & TRUCK STOP HANDLERS
+-- ═══════════════════════════════════════════════════════════════
+
+--- Livestock welfare event (braking, corners, collision, off-road, heat)
+RegisterNetEvent('trucking:server:welfareEvent', function(bolId, eventType)
+    local src = source
+    if not ValidateLoadOwner(src, bolId) then return end
+    if not RateLimitEvent(src, 'welfare_' .. (eventType or ''), 2000) then return end
+
+    local activeLoad = ActiveLoads[bolId]
+    if not activeLoad then return end
+
+    -- Apply welfare penalty based on event type
+    local penalties = {
+        hard_braking = -0.5,
+        sharp_corner = -0.3,
+        collision    = -1.5,
+        off_road     = -0.2,
+        heat_exposure = -0.5,
+    }
+
+    local penalty = penalties[eventType] or -0.3
+    activeLoad.livestock_welfare = math.max(0, (activeLoad.livestock_welfare or 100) + penalty)
+    ActiveLoads[bolId] = activeLoad
+end)
+
+--- Livestock rest stop completed (dynamic event name from client)
+RegisterNetEvent('trucking:server:livestockRestStop', function(bolId, restType)
+    local src = source
+    if not ValidateLoadOwner(src, bolId) then return end
+    if not RateLimitEvent(src, 'restStop', 10000) then return end
+
+    local activeLoad = ActiveLoads[bolId]
+    if not activeLoad then return end
+
+    local bonuses = {
+        quick = 0.5,
+        water = 1.0,
+        full  = 1.5,
+    }
+
+    local bonus = bonuses[restType] or 0.5
+    activeLoad.livestock_welfare = math.min(100, (activeLoad.livestock_welfare or 100) + bonus)
+    ActiveLoads[bolId] = activeLoad
+
+    DB.InsertBOLEvent({
+        bol_id = bolId,
+        citizenid = activeLoad.citizenid,
+        event_type = 'livestock_rest_stop',
+        event_data = { type = restType, welfare_after = activeLoad.livestock_welfare },
+    })
+end)
+
+--- Truck stop repair
+RegisterNetEvent('trucking:server:truckStopRepair', function(repairCost, plate)
+    local src = source
+    local player = exports.qbx_core:GetPlayer(src)
+    if not player then return end
+    if not RateLimitEvent(src, 'truckRepair', 10000) then return end
+
+    -- Deduct repair cost
+    local deducted = player.Functions.RemoveMoney('cash', repairCost, 'Truck stop repair')
+    if not deducted then
+        deducted = player.Functions.RemoveMoney('bank', repairCost, 'Truck stop repair')
+    end
+
+    if not deducted then
+        lib.notify(src, { title = 'Repair Bay', description = 'Insufficient funds.', type = 'error' })
+        return
+    end
+
+    -- Notify client to apply repair
+    TriggerClientEvent('trucking:client:repairApproved', src, plate)
+
+    lib.notify(src, {
+        title = 'Repair Bay',
+        description = ('Repair complete. Charged %s.'):format(FormatMoney(repairCost)),
+        type = 'success',
+    })
+end)
+
+--- Truck stop repair cancelled
+RegisterNetEvent('trucking:server:truckStopRepairCancelled', function(plate)
+    local src = source
+    if not RateLimitEvent(src, 'repairCancel', 3000) then return end
+    -- No server action needed — client handles animation cancel
+end)

@@ -677,3 +677,149 @@ CreateThread(function()
         end
     end
 end)
+
+-- ═══════════════════════════════════════════════════════════════
+-- HAZMAT & TANKER EVENT HANDLERS
+-- ═══════════════════════════════════════════════════════════════
+
+--- Hazmat spill zone created by client
+RegisterNetEvent('trucking:server:hazmatSpillCreated', function(data)
+    local src = source
+    if not RateLimitEvent(src, 'hazmatSpill', 5000) then return end
+
+    local players = GetPlayers()
+    for _, pid in ipairs(players) do
+        if tonumber(pid) ~= src then
+            TriggerClientEvent('trucking:client:hazmatSpillZone', tonumber(pid), data)
+        end
+    end
+
+    SendWebhook('hazmat_spill', {
+        type = data and data.type or 'chemical',
+        coords = data and data.coords,
+    })
+end)
+
+--- Hazmat cargo ignited
+RegisterNetEvent('trucking:server:hazmatIgnited', function(data)
+    local src = source
+    if not RateLimitEvent(src, 'hazmatIgnited', 5000) then return end
+
+    local players = GetPlayers()
+    for _, pid in ipairs(players) do
+        if tonumber(pid) ~= src then
+            TriggerClientEvent('trucking:client:hazmatFire', tonumber(pid), data)
+        end
+    end
+end)
+
+--- Hazmat collision event
+RegisterNetEvent('trucking:server:hazmatCollision', function(data)
+    local src = source
+    if not RateLimitEvent(src, 'hazmatCollision', 3000) then return end
+
+    if data and data.bolId then
+        local activeLoad = ActiveLoads[data.bolId]
+        if activeLoad then
+            activeLoad.integrity_pct = math.max(0, (activeLoad.integrity_pct or 100) - (data.damage or 5))
+            ActiveLoads[data.bolId] = activeLoad
+        end
+    end
+end)
+
+--- Hazmat integrity-based spill
+RegisterNetEvent('trucking:server:hazmatIntegritySpill', function(data)
+    local src = source
+    if not RateLimitEvent(src, 'hazmatIntSpill', 5000) then return end
+
+    if data and data.bolId then
+        DB.InsertBOLEvent({
+            bol_id = data.bolId,
+            citizenid = data.citizenid,
+            event_type = 'hazmat_integrity_spill',
+            event_data = data,
+        })
+    end
+
+    local players = GetPlayers()
+    for _, pid in ipairs(players) do
+        if tonumber(pid) ~= src then
+            TriggerClientEvent('trucking:client:hazmatSpillZone', tonumber(pid), data)
+        end
+    end
+end)
+
+--- Hazmat cleanup completed
+RegisterNetEvent('trucking:server:hazmatCleanupComplete', function(data)
+    local src = source
+    if not RateLimitEvent(src, 'hazmatCleanup', 10000) then return end
+
+    local players = GetPlayers()
+    for _, pid in ipairs(players) do
+        TriggerClientEvent('trucking:client:hazmatCleanedUp', tonumber(pid), data)
+    end
+end)
+
+--- Hazmat dispatch alert to police
+RegisterNetEvent('trucking:server:hazmatDispatch', function(data)
+    local src = source
+    if not RateLimitEvent(src, 'hazmatDispatch', 10000) then return end
+
+    if Config.PoliceResources then
+        for _, resourceName in ipairs(Config.PoliceResources) do
+            pcall(function()
+                exports[resourceName]:dispatchAlert({
+                    type = 'hazmat_spill',
+                    priority = 'high',
+                    location = data and data.coords,
+                    description = 'HAZMAT spill reported',
+                })
+            end)
+        end
+    end
+end)
+
+--- Tanker drain robbery completed
+RegisterNetEvent('trucking:server:drainComplete', function(data)
+    local src = source
+    if not RateLimitEvent(src, 'drainComplete', 10000) then return end
+
+    local player = exports.qbx_core:GetPlayer(src)
+    if not player then return end
+
+    if data and data.item then
+        exports.ox_inventory:AddItem(src, data.item, data.quantity or 1)
+    end
+
+    SendWebhook('tanker_drain', {
+        citizenid = player.PlayerData.citizenid,
+        item = data and data.item,
+        quantity = data and data.quantity,
+    })
+end)
+
+--- Fuel spill ignited
+RegisterNetEvent('trucking:server:fuelSpillIgnited', function(data)
+    local src = source
+    if not RateLimitEvent(src, 'fuelSpillIgnited', 5000) then return end
+
+    local players = GetPlayers()
+    for _, pid in ipairs(players) do
+        if tonumber(pid) ~= src then
+            TriggerClientEvent('trucking:client:fuelFireZone', tonumber(pid), data)
+        end
+    end
+end)
+
+--- Tanker ignition / fire event
+RegisterNetEvent('trucking:server:tankerIgnition', function(data)
+    local src = source
+    if not RateLimitEvent(src, 'tankerIgnition', 5000) then return end
+
+    local players = GetPlayers()
+    for _, pid in ipairs(players) do
+        if tonumber(pid) ~= src then
+            TriggerClientEvent('trucking:client:tankerFireAlert', tonumber(pid), data)
+        end
+    end
+end)

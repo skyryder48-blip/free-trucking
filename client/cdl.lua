@@ -157,7 +157,7 @@ local function OpenWrittenTest(testType)
     cdlTestActive = true
 
     -- Request test questions from server
-    TriggerServerEvent('trucking:server:requestCDLTest', testType)
+    TriggerServerEvent('trucking:server:startWrittenTest', testType)
 end
 
 --- NUI callback: test questions received from server, display them.
@@ -188,7 +188,7 @@ RegisterNUICallback('trucking:submitCDLTest', function(data, cb)
         return
     end
 
-    TriggerServerEvent('trucking:server:submitCDLTest', data.testType, data.answers)
+    TriggerServerEvent('trucking:server:submitTestResults', data.testType, data.answers)
     cb({ ok = true })
 end)
 
@@ -362,7 +362,7 @@ local function RunStage1()
         duration = 5000,
     })
 
-    TriggerServerEvent('trucking:server:tutorialStageComplete', 1)
+    TriggerServerEvent('trucking:server:completeTutorialStage', 1)
     return true
 end
 
@@ -489,7 +489,7 @@ local function RunStage2()
         duration = 5000,
     })
 
-    TriggerServerEvent('trucking:server:tutorialStageComplete', 2)
+    TriggerServerEvent('trucking:server:completeTutorialStage', 2)
     return true
 end
 
@@ -568,7 +568,7 @@ local function RunStage3()
         duration = 5000,
     })
 
-    TriggerServerEvent('trucking:server:tutorialStageComplete', 3)
+    TriggerServerEvent('trucking:server:completeTutorialStage', 3)
     return true
 end
 
@@ -619,7 +619,7 @@ local function RunStage4()
         duration = 5000,
     })
 
-    TriggerServerEvent('trucking:server:tutorialStageComplete', 4)
+    TriggerServerEvent('trucking:server:completeTutorialStage', 4)
     return true
 end
 
@@ -718,10 +718,10 @@ local function RunStage5()
             type = 'warning',
             duration = 8000,
         })
-        TriggerServerEvent('trucking:server:tutorialStageComplete', 5, false)
+        TriggerServerEvent('trucking:server:completeTutorialStage', 5, false)
     end
 
-    TriggerServerEvent('trucking:server:tutorialStageComplete', 5, dockSuccess)
+    TriggerServerEvent('trucking:server:completeTutorialStage', 5, dockSuccess)
     return dockSuccess
 end
 

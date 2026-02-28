@@ -173,7 +173,7 @@ RegisterNetEvent('trucking:client:enableDispatchMode', function()
         duration = 6000,
     })
 
-    TriggerServerEvent('trucking:server:dispatchModeChanged', true)
+    TriggerServerEvent('trucking:server:enableDispatchMode')
 end)
 
 --- Disable dispatcher mode.
@@ -190,7 +190,7 @@ RegisterNetEvent('trucking:client:disableDispatchMode', function()
         type = 'inform',
     })
 
-    TriggerServerEvent('trucking:server:dispatchModeChanged', false)
+    TriggerServerEvent('trucking:server:disableDispatchMode')
 end)
 
 --- Toggle dispatch mode.
@@ -369,7 +369,7 @@ RegisterNetEvent('trucking:client:directOffer', function(data)
     })
 
     if result == 'confirm' then
-        TriggerServerEvent('trucking:server:acceptDirectOffer', data.loadId)
+        TriggerServerEvent('trucking:server:acceptLoad', data.loadId)
     else
         TriggerServerEvent('trucking:server:declineDirectOffer', data.loadId)
     end
@@ -401,7 +401,7 @@ RegisterNUICallback('trucking:dispatchRefresh', function(_, cb)
         return
     end
 
-    TriggerServerEvent('trucking:server:requestCompanyStatus')
+    TriggerServerEvent('trucking:server:getCompanyActiveLoads')
     cb({ ok = true })
 end)
 

@@ -155,7 +155,7 @@ function OpenLoadingDockInteraction()
             icon = 'fas fa-check',
             onSelect = function()
                 reeferConfirmed = true
-                TriggerServerEvent('trucking:server:confirmReeferTemp', ActiveLoad.bol_id)
+                TriggerServerEvent('trucking:server:getExcursionStatus', ActiveLoad.bol_id)
                 lib.notify({
                     title = 'Temperature Confirmed',
                     description = 'Reefer set to ' .. ActiveBOL.temp_required_min
@@ -245,7 +245,7 @@ function OpenLoadingDockInteraction()
                 cancel = true,
             })
             if confirm == 'confirm' then
-                TriggerServerEvent('trucking:server:loadAbandoned', ActiveLoad.bol_id)
+                TriggerServerEvent('trucking:server:abandonLoad', ActiveLoad.bol_id)
             end
         end,
     })
@@ -480,7 +480,7 @@ function StartManifestVerification()
     end
 
     -- Send to server for validation — server decides if manifest matches
-    TriggerServerEvent('trucking:server:verifyManifest', ActiveLoad.bol_id, {
+    TriggerServerEvent('trucking:server:manifestVerified', ActiveLoad.bol_id, {
         bol_number = input[1],
         cargo_type = input[2],
         destination = input[3],
@@ -558,7 +558,7 @@ function OpenDeliveryInteraction()
             description = 'Hand over BOL and cargo to receiving dock',
             icon = 'fas fa-check-double',
             onSelect = function()
-                TriggerServerEvent('trucking:server:loadDelivered', ActiveLoad.bol_id)
+                TriggerServerEvent('trucking:server:deliverLoad', ActiveLoad.bol_id)
             end,
         })
     else
@@ -645,7 +645,7 @@ function OpenInsuranceTerminal(location)
                 description = '8% of load value — covers next accepted load only',
                 icon = 'fas fa-file-contract',
                 onSelect = function()
-                    TriggerServerEvent('trucking:server:insurancePurchase', 'single_load')
+                    TriggerServerEvent('trucking:server:purchaseInsurance', 'single_load')
                 end,
             },
             {
@@ -713,7 +713,7 @@ function OpenInsuranceTierSelect(policyType)
                         cancel = true,
                     })
                     if confirm == 'confirm' then
-                        TriggerServerEvent('trucking:server:insurancePurchase', policyType, tier)
+                        TriggerServerEvent('trucking:server:purchaseInsurance', policyType, tier)
                     end
                 end,
             })

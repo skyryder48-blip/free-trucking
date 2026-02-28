@@ -663,4 +663,32 @@ AddEventHandler('playerDropped', function()
     end
 end)
 
+--- Send convoy invite to another player
+RegisterNetEvent('trucking:server:inviteToConvoy', function(convoyId, targetCitizenId)
+    local src = source
+    local player = exports.qbx_core:GetPlayer(src)
+    if not player then return end
+    if not RateLimitEvent(src, 'convoyInvite', 5000) then return end
+
+    local convoy = Convoys[convoyId]
+    if not convoy then return end
+
+    -- Verify sender is in the convoy
+    local citizenid = player.PlayerData.citizenid
+    if not ConvoyMembers[convoyId] or not ConvoyMembers[convoyId][citizenid] then return end
+
+    -- Find target player
+    local targetSrc = GetPlayerByIdentifier(targetCitizenId)
+    if not targetSrc then
+        lib.notify(src, { title = 'Convoy', description = 'Player not online.', type = 'error' })
+        return
+    end
+
+    TriggerClientEvent('trucking:client:convoyInvite', targetSrc, {
+        convoyId = convoyId,
+        invitedBy = citizenid,
+        convoyType = convoy.convoy_type,
+    })
+end)
+
 print('[trucking:convoy] Convoy system initialized')

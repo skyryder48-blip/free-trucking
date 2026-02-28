@@ -353,12 +353,12 @@ local function StartFormationMonitor()
                         type        = 'error',
                         duration    = 8000,
                     })
-                    TriggerServerEvent('trucking:server:militaryEscortsDestroyed', convoyLoadId)
+                    TriggerServerEvent('trucking:server:escortDestroyed', convoyLoadId)
                 end
 
                 -- Check if unguarded window has expired
                 if GetElapsed(unguardedTimer) >= UNGUARDED_DURATION then
-                    TriggerServerEvent('trucking:server:militaryUnguardedExpired', convoyLoadId)
+                    TriggerServerEvent('trucking:server:militaryLongCon', convoyLoadId)
                 end
 
                 goto continueFormation

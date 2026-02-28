@@ -218,7 +218,7 @@ RegisterNetEvent('trucking:client:directOffer', function(data)
     })
 
     if accept == 'confirm' then
-        TriggerServerEvent('trucking:server:acceptDirectOffer', data.loadId)
+        TriggerServerEvent('trucking:server:acceptLoad', data.loadId)
     end
 end)
 
@@ -440,13 +440,13 @@ end)
 
 --- Request profile data
 RegisterNUICallback('trucking:requestProfile', function(_, cb)
-    TriggerServerEvent('trucking:server:requestProfile')
+    TriggerServerEvent('trucking:server:getCredentials')
     cb({ ok = true })
 end)
 
 --- Request insurance data
 RegisterNUICallback('trucking:requestInsurance', function(_, cb)
-    TriggerServerEvent('trucking:server:requestInsurance')
+    TriggerServerEvent('trucking:server:getInsuranceStatus')
     cb({ ok = true })
 end)
 
@@ -456,13 +456,13 @@ RegisterNUICallback('trucking:purchaseInsurance', function(data, cb)
         cb({ ok = false, error = 'No policy type specified' })
         return
     end
-    TriggerServerEvent('trucking:server:insurancePurchase', data.policyType, data.tierCoverage)
+    TriggerServerEvent('trucking:server:purchaseInsurance', data.policyType, data.tierCoverage)
     cb({ ok = true })
 end)
 
 --- Request company data
 RegisterNUICallback('trucking:requestCompany', function(_, cb)
-    TriggerServerEvent('trucking:server:requestCompany')
+    TriggerServerEvent('trucking:server:getCompanyMembers')
     cb({ ok = true })
 end)
 
@@ -481,7 +481,7 @@ RegisterNUICallback('trucking:requestLoadDetail', function(data, cb)
         cb({ ok = false, error = 'No load specified' })
         return
     end
-    TriggerServerEvent('trucking:server:requestLoadDetail', data.loadId)
+    TriggerServerEvent('trucking:server:getLoadDetail', data.loadId)
     cb({ ok = true })
 end)
 

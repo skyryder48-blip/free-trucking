@@ -93,6 +93,12 @@ Config.OversizedZoneOverride = vec3(8.0, 5.0, 3.0)  -- oversized loads (T2-05) u
 -- T1+ loads hard-block acceptance without an active policy.
 Config.InsuranceExemptTiers     = { [0] = true }   -- tiers that do not require insurance
 Config.ClaimPayoutMultiplier    = 2                -- deposit x 2 + premium allocated
+
+-- Insurance terminal locations (standalone offices, separate from truck stop terminals)
+Config.InsuranceLocations = {
+    { label = 'Vapid Commercial Insurance — LS',   coords = vector3(-157.0, -302.0, 40.0) },
+    { label = 'Vapid Commercial Insurance — Sandy', coords = vector3(1862.0, 3690.0, 34.27) },
+}
 Config.ClaimDelaySeconds        = 900              -- 15-minute payout delay after approval
 Config.ClaimCheckIntervalMs     = 60000            -- check pending claims every 60 seconds
 

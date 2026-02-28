@@ -1074,4 +1074,26 @@ AddEventHandler('playerDropped', function()
     ActiveBriefings[src] = nil
 end)
 
+--- Tutorial fully completed (all stages passed)
+RegisterNetEvent('trucking:server:tutorialComplete', function()
+    local src = source
+    local player = exports.qbx_core:GetPlayer(src)
+    if not player then return end
+    if not RateLimitEvent(src, 'tutorialComplete', 10000) then return end
+
+    local citizenid = player.PlayerData.citizenid
+
+    -- Mark tutorial as completed in DB
+    DB.UpdateDriver(citizenid, { tutorial_completed = true, tutorial_completed_at = GetServerTime() })
+
+    -- Issue Class B license on tutorial completion
+    IssueLicense(src, 'class_b')
+
+    lib.notify(src, {
+        title = 'Tutorial Complete',
+        description = 'Class B CDL issued. You\'re ready to haul.',
+        type = 'success',
+    })
+end)
+
 print('[trucking:cdl] CDL and certification system initialized')

@@ -64,6 +64,8 @@ server_scripts {
     'server/leon.lua',
     'server/military.lua',
     'server/explosions.lua',
+    'server/admin.lua',
+    'server/temperature.lua',
     'server/webhooks.lua',
     'server/exports.lua',
 }

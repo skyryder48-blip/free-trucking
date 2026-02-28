@@ -391,7 +391,7 @@ function StartConvoyTracking()
                 speed = math.floor(GetEntitySpeed(vehicle) * 2.23694) -- mph
             end
 
-            TriggerServerEvent('trucking:server:convoyPositionUpdate', ConvoyId, {
+            TriggerServerEvent('trucking:server:updateConvoyPosition', ConvoyId, {
                 x = coords.x,
                 y = coords.y,
                 z = coords.z,

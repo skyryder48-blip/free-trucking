@@ -130,39 +130,16 @@ local function HasGovernmentClearance(citizenid)
     return cert ~= nil
 end
 
---- Dispatch alert to law enforcement via both lb-dispatch and ultimate-le
+--- Dispatch alert to law enforcement via configured police resources
 ---@param alertData table Alert data including type, priority, location, description
 local function DispatchToPolice(alertData)
     if not alertData then return end
+    if not Config.PoliceResources then return end
 
-    -- Try lb-dispatch
-    local lbSuccess = pcall(function()
-        exports['lb-dispatch']:dispatchAlert(alertData)
-    end)
-
-    if not lbSuccess then
-        -- Silently handle — resource may not be running
-        print('[Trucking Military] lb-dispatch not available for alert dispatch')
-    end
-
-    -- Try ultimate-le
-    local uleSuccess = pcall(function()
-        exports['ultimate-le']:dispatchAlert(alertData)
-    end)
-
-    if not uleSuccess then
-        print('[Trucking Military] ultimate-le not available for alert dispatch')
-    end
-
-    -- Also try configured police resource as fallback
-    if Config.PoliceResource and Config.PoliceResource ~= '' then
-        local configSuccess = pcall(function()
-            exports[Config.PoliceResource]:dispatchAlert(alertData)
+    for _, resourceName in ipairs(Config.PoliceResources) do
+        pcall(function()
+            exports[resourceName]:dispatchAlert(alertData)
         end)
-
-        if not configSuccess then
-            print(('[Trucking Military] %s not available for alert dispatch'):format(Config.PoliceResource))
-        end
     end
 end
 
