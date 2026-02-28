@@ -72,12 +72,16 @@ local function DetectDrainUseCase(targetVehicle)
         isOwnVehicle = lib.callback.await('trucking:server:isMyTanker', false, loadPlate)
     end
 
-    -- Check inventory for required items
-    local hasHose       = exports.ox_inventory:Search('count', 'fuel_hose') > 0
-    local hasWrench     = exports.ox_inventory:Search('count', 'valve_wrench') > 0
-    local hasDrum       = exports.ox_inventory:Search('count', 'fuel_drum') > 0
-    local hasCanister   = exports.ox_inventory:Search('count', 'fuel_canister') > 0
-    local canisterCount = exports.ox_inventory:Search('count', 'fuel_canister')
+    -- Check inventory for required items (protected against missing ox_inventory)
+    local function invCount(item)
+        local ok, result = pcall(exports.ox_inventory.Search, exports.ox_inventory, 'count', item)
+        return ok and result or 0
+    end
+    local hasHose       = invCount('fuel_hose') > 0
+    local hasWrench     = invCount('valve_wrench') > 0
+    local hasDrum       = invCount('fuel_drum') > 0
+    local hasCanister   = invCount('fuel_canister') > 0
+    local canisterCount = invCount('fuel_canister')
 
     -- Must have fuel_hose for any drain operation
     if not hasHose then
@@ -681,7 +685,7 @@ CreateThread(function()
     end
 
     while true do
-        Wait(1000)
+        Wait(2500)
 
         local playerPed    = cache.ped
         local playerCoords = GetEntityCoords(playerPed)
@@ -689,15 +693,15 @@ CreateThread(function()
         -- Only check when on foot, not in a vehicle
         if cache.vehicle then goto continue end
 
-        -- Check nearby vehicles for tankers
+        -- Check nearby vehicles for tankers (distance pre-filter before model check)
         local nearbyVehicle = nil
         local nearestDist   = 5.0  -- interaction range
 
         for _, vehicle in ipairs(GetGamePool('CVehicle')) do
-            if DoesEntityExist(vehicle) and IsTankerVehicle(vehicle) then
+            if DoesEntityExist(vehicle) then
                 local vehCoords = GetEntityCoords(vehicle)
                 local dist = #(playerCoords - vehCoords)
-                if dist < nearestDist then
+                if dist < nearestDist and IsTankerVehicle(vehicle) then
                     nearestDist   = dist
                     nearbyVehicle = vehicle
                 end
@@ -705,8 +709,9 @@ CreateThread(function()
         end
 
         if nearbyVehicle then
-            -- Check if player has fuel_hose
-            local hasHose = exports.ox_inventory:Search('count', 'fuel_hose') > 0
+            -- Check if player has fuel_hose (protected against missing ox_inventory)
+            local hoseOk, hoseResult = pcall(exports.ox_inventory.Search, exports.ox_inventory, 'count', 'fuel_hose')
+            local hasHose = hoseOk and hoseResult > 0
             if hasHose then
                 -- Show interaction hint
                 lib.showTextUI('[E] - Drain Tanker', { position = 'right-center' })

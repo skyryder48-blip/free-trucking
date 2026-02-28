@@ -302,6 +302,15 @@ local function CreateStationZones()
                     textUIShowing = true
                 end
             end,
+            inside = function()
+                if weighStationActive and inStationZone and not inspectionInProgress then
+                    if IsControlJustReleased(0, 38) then -- E key
+                        if currentStationId then
+                            RunInspection(currentStationId, currentStationLabel or 'Unknown')
+                        end
+                    end
+                end
+            end,
             onExit = function()
                 inStationZone = false
                 currentStationId = nil
@@ -334,23 +343,7 @@ local function RemoveStationZones()
     end
 end
 
--- ─────────────────────────────────────────────
--- KEYBIND HANDLER
--- ─────────────────────────────────────────────
-CreateThread(function()
-    while true do
-        Wait(0)
-        if weighStationActive and inStationZone and not inspectionInProgress then
-            if IsControlJustReleased(0, 38) then -- E key
-                if currentStationId then
-                    RunInspection(currentStationId, currentStationLabel or 'Unknown')
-                end
-            end
-        else
-            Wait(500) -- reduce polling when not relevant
-        end
-    end
-end)
+-- Keybind handling moved to zone `inside` callback above for better performance.
 
 -- ─────────────────────────────────────────────
 -- GPS ROUTING (T2-T3 auto-route through stations)

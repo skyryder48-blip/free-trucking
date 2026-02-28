@@ -391,6 +391,13 @@ local function CreateRestStopZones()
                     })
                 end
             end,
+            inside = function()
+                if livestockMonitoringActive and inRestStopZone then
+                    if IsControlJustReleased(0, 38) then -- E key
+                        ShowRestStopMenu()
+                    end
+                end
+            end,
             onExit = function()
                 inRestStopZone = false
                 if restStopTextUIShowing then
@@ -419,21 +426,7 @@ local function RemoveRestStopZones()
     end
 end
 
--- ─────────────────────────────────────────────
--- REST STOP KEYBIND
--- ─────────────────────────────────────────────
-CreateThread(function()
-    while true do
-        Wait(0)
-        if livestockMonitoringActive and inRestStopZone then
-            if IsControlJustReleased(0, 38) then -- E key
-                ShowRestStopMenu()
-            end
-        else
-            Wait(500) -- reduce polling when not in zone
-        end
-    end
-end)
+-- Keybind handling moved to zone `inside` callback above for better performance.
 
 -- ─────────────────────────────────────────────
 -- HUD UPDATE

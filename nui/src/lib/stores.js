@@ -68,5 +68,14 @@ export const convoyData = writable({
   bonusPercentage: 0,
 });
 
+/** CDL written test data: { testType, questions, questionCount, passScore, fee } */
+export const cdlTestData = writable(null);
+
+/** HAZMAT briefing data: { topics } */
+export const hazmatBriefingData = writable(null);
+
+/** CDL test result: { passed, score, required, totalQuestions } */
+export const cdlTestResult = writable(null);
+
 /** NUI visibility state */
 export const visibility = writable(false);

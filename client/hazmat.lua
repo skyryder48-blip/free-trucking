@@ -509,9 +509,10 @@ local function AttemptCleanup(zoneId)
     local classDef = zoneData.classDef
     if not classDef then return end
 
-    -- Check for required cleanup item
+    -- Check for required cleanup item (protected against missing ox_inventory)
     local requiredItem = classDef.cleanupItem
-    local hasItem = exports.ox_inventory:Search('count', requiredItem) > 0
+    local itemOk, itemResult = pcall(exports.ox_inventory.Search, exports.ox_inventory, 'count', requiredItem)
+    local hasItem = itemOk and itemResult > 0
 
     if not hasItem then
         local itemLabel = requiredItem == 'hazmat_cleanup_specialist'
@@ -588,9 +589,10 @@ CreateThread(function()
 
             -- Within cleanup range (edge of zone)
             if dist < zoneData.radius + 3.0 and dist > zoneData.radius - 5.0 then
-                -- Check if player has cleanup item
+                -- Check if player has cleanup item (protected against missing ox_inventory)
                 local requiredItem = zoneData.classDef.cleanupItem
-                local hasItem = exports.ox_inventory:Search('count', requiredItem) > 0
+                local cleanupOk, cleanupResult = pcall(exports.ox_inventory.Search, exports.ox_inventory, 'count', requiredItem)
+                local hasItem = cleanupOk and cleanupResult > 0
 
                 if hasItem and not cleanupInProgress then
                     lib.showTextUI(string.format('[E] - Clean up Class %d %s hazard', zoneData.class, zoneData.classDef.name), {

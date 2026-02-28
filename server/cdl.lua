@@ -974,7 +974,16 @@ RegisterNetEvent('trucking:server:startWrittenTest', function(testType)
     if not RateLimitEvent(src, 'startWrittenTest', 5000) then return end
 
     local success, result = StartWrittenTest(src, testType)
-    TriggerClientEvent('trucking:client:writtenTestStarted', src, success, result)
+    if success then
+        local config = TestConfig[testType]
+        TriggerClientEvent('trucking:client:cdlTestQuestions', src, {
+            testType = testType,
+            questions = result,
+            fee = config and config.fee or 0,
+        })
+    else
+        TriggerClientEvent('trucking:client:cdlTestFailed', src, result)
+    end
 end)
 
 RegisterNetEvent('trucking:server:submitTestResults', function(testType, answers)
@@ -982,7 +991,9 @@ RegisterNetEvent('trucking:server:submitTestResults', function(testType, answers
     if not RateLimitEvent(src, 'submitTestResults', 5000) then return end
 
     local success, result = SubmitTestResults(src, testType, answers)
-    TriggerClientEvent('trucking:client:testResults', src, success, result)
+    if success then
+        TriggerClientEvent('trucking:client:testResults', src, result)
+    end
 end)
 
 RegisterNetEvent('trucking:server:startHAZMATBriefing', function()

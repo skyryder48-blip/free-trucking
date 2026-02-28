@@ -10,6 +10,9 @@
     companyData,
     hudData,
     convoyData,
+    cdlTestData,
+    hazmatBriefingData,
+    cdlTestResult,
     visibility,
   } from './lib/stores.js';
 
@@ -17,6 +20,8 @@
   import Board from './screens/Board.svelte';
   import LoadDetail from './screens/LoadDetail.svelte';
   import ActiveLoad from './screens/ActiveLoad.svelte';
+  import CDLTest from './screens/CDLTest.svelte';
+  import HAZMATBriefing from './screens/HAZMATBriefing.svelte';
 
   /** @type {'standalone' | 'phone'} */
   let mode = 'standalone';
@@ -119,6 +124,34 @@
         case 'updateConvoy':
           convoyData.set(data.convoy);
           break;
+
+        case 'openCDLTest':
+          cdlTestData.set(data);
+          cdlTestResult.set(null);
+          currentScreen.set('cdlTest');
+          visibility.set(true);
+          break;
+
+        case 'openHazmatBriefing':
+          hazmatBriefingData.set(data);
+          currentScreen.set('hazmatBriefing');
+          visibility.set(true);
+          break;
+
+        case 'testResults':
+          cdlTestResult.set(data);
+          break;
+
+        case 'cdlTestResult':
+          cdlTestResult.set(data);
+          break;
+
+        case 'closeCDLTest':
+          cdlTestData.set(null);
+          hazmatBriefingData.set(null);
+          cdlTestResult.set(null);
+          currentScreen.set('home');
+          break;
       }
     });
 
@@ -182,6 +215,10 @@
           />
         {:else if screen === 'activeLoad'}
           <ActiveLoad on:navigate={(e) => navigateTo(e.detail.screen, e.detail.data)} />
+        {:else if screen === 'cdlTest'}
+          <CDLTest />
+        {:else if screen === 'hazmatBriefing'}
+          <HAZMATBriefing />
         {/if}
       </main>
     </div>

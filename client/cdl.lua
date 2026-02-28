@@ -242,6 +242,15 @@ RegisterNUICallback('trucking:closeCDLTest', function(_, cb)
     cb({ ok = true })
 end)
 
+--- Player completes HAZMAT safety briefing (read all topics).
+RegisterNUICallback('trucking:completeHAZMATBriefing', function(_, cb)
+    cdlTestActive = false
+    SetNuiFocus(false, false)
+    SendNUIMessage({ action = 'closeCDLTest' })
+    TriggerServerEvent('trucking:server:completeHAZMATBriefing')
+    cb({ ok = true })
+end)
+
 -- ─────────────────────────────────────────────
 -- TUTORIAL VEHICLE MANAGEMENT
 -- ─────────────────────────────────────────────
@@ -853,7 +862,9 @@ local function ShowLSDOTMenu()
                     .. ' + $500 background. Completion grants endorsement.',
                 icon = 'radiation',
                 onSelect = function()
-                    OpenWrittenTest('hazmat')
+                    if cdlTestActive then return end
+                    cdlTestActive = true
+                    TriggerServerEvent('trucking:server:startHAZMATBriefing')
                 end,
             },
         },
@@ -1026,31 +1037,33 @@ RegisterNetEvent('trucking:client:testResults', function(data)
         action = 'testResults',
         data = data,
     })
+    local scorePct = (data.totalQuestions and data.totalQuestions > 0)
+        and math.floor((data.score / data.totalQuestions) * 100)
+        or 0
     if data.passed then
         lib.notify({
             title = 'Test Passed',
-            description = 'Score: ' .. (data.score or 0) .. '% — License updated.',
+            description = 'Score: ' .. scorePct .. '% — License updated.',
             type = 'success',
             duration = 8000,
         })
     else
         lib.notify({
             title = 'Test Failed',
-            description = 'Score: ' .. (data.score or 0) .. '%. Try again later.',
+            description = 'Score: ' .. scorePct .. '%. Try again later.',
             type = 'error',
             duration = 8000,
         })
     end
 end)
 
---- Server confirms written test has started (questions sent separately)
-RegisterNetEvent('trucking:client:writtenTestStarted', function(data)
-    if not data then return end
-    cdlTestActive = true
+--- Server reports test start failure (e.g. already licensed, locked out, insufficient funds)
+RegisterNetEvent('trucking:client:cdlTestFailed', function(reason)
+    cdlTestActive = false
     lib.notify({
-        title = 'CDL Written Test',
-        description = 'Test starting — ' .. (data.questionCount or 10) .. ' questions.',
-        type = 'inform',
+        title = 'CDL Test',
+        description = reason or 'Unable to start test.',
+        type = 'error',
     })
 end)
 
