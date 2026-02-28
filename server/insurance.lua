@@ -81,7 +81,7 @@ function PurchasePolicy(src, policyType, tierCoverage)
         WHERE citizenid = ? AND status = 'active'
           AND tier_coverage >= ?
           AND (valid_until IS NULL OR valid_until > ?)
-    ]], { citizenid, tierCoverage, os.time() })
+    ]], { citizenid, tierCoverage, GetServerTime() })
 
     if existingPolicy then
         return false, 'active_policy_exists'
@@ -94,7 +94,7 @@ function PurchasePolicy(src, policyType, tierCoverage)
     end
 
     -- Calculate validity period
-    local now = os.time()
+    local now = GetServerTime()
     local validUntil = nil
     if policyType == 'day' then
         validUntil = now + 86400      -- 24 hours
@@ -147,7 +147,7 @@ function HasActivePolicy(citizenid, tier)
     -- Tier 0 loads do not require insurance
     if tier == 0 then return true end
 
-    local now = os.time()
+    local now = GetServerTime()
     local policy = MySQL.single.await([[
         SELECT * FROM truck_insurance_policies
         WHERE citizenid = ?
@@ -299,7 +299,7 @@ function VerifyAndApproveClaim(citizenid, bolNumber)
     local claimType = bol.bol_status == 'stolen' and 'theft' or 'abandonment'
 
     -- Create claim record with 15-minute payout delay
-    local now = os.time()
+    local now = GetServerTime()
     local payoutAt = now + 900  -- 15 minutes
 
     local claimId = MySQL.insert.await([[
@@ -331,7 +331,7 @@ end
 -- ─────────────────────────────────────────────
 
 function ProcessPendingClaims()
-    local now = os.time()
+    local now = GetServerTime()
 
     local pendingClaims = MySQL.query.await([[
         SELECT ic.* FROM truck_insurance_claims ic
@@ -410,7 +410,7 @@ end)
 function GetPolicyStatus(citizenid)
     if not citizenid then return {} end
 
-    local now = os.time()
+    local now = GetServerTime()
 
     local policies = MySQL.query.await([[
         SELECT id, policy_type, tier_coverage, premium_paid, status,
@@ -444,7 +444,7 @@ end
 CreateThread(function()
     while true do
         Wait(300000)  -- 5 minutes
-        local now = os.time()
+        local now = GetServerTime()
         local expired = MySQL.update.await([[
             UPDATE truck_insurance_policies
             SET status = 'expired'

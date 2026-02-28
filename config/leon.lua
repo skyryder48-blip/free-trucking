@@ -307,7 +307,7 @@ LeonConfig.HeatLockoutClearAt   = 15
 --- Check if the current server time is within Leon's operating hours
 ---@return boolean
 function IsLeonAvailable()
-    local hour = tonumber(os.date('%H'))
+    local hour = tonumber(os.date('%H', GetServerTime()))
     if LeonConfig.Hours.start > LeonConfig.Hours.finish then
         -- Wraps midnight: e.g., 22:00 - 04:00
         return hour >= LeonConfig.Hours.start or hour < LeonConfig.Hours.finish

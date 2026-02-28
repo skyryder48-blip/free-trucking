@@ -149,7 +149,7 @@ function StartWrittenTest(src, testType)
     if not driver then
         -- Create driver record on first test attempt
         local playerName = player.PlayerData.charinfo.firstname .. ' ' .. player.PlayerData.charinfo.lastname
-        local now = os.time()
+        local now = GetServerTime()
         local driverId = MySQL.insert.await([[
             INSERT INTO truck_drivers (citizenid, player_name, reputation_score, reputation_tier, first_seen, last_seen)
             VALUES (?, ?, 500, 'developing', ?, ?)
@@ -172,8 +172,8 @@ function StartWrittenTest(src, testType)
         { driver.id, testType }
     )
     if licenseRecord and licenseRecord.locked_until then
-        if os.time() < licenseRecord.locked_until then
-            local remaining = licenseRecord.locked_until - os.time()
+        if GetServerTime() < licenseRecord.locked_until then
+            local remaining = licenseRecord.locked_until - GetServerTime()
             return false, ('locked_out:%d'):format(remaining)
         else
             -- Lockout expired — reset attempts
@@ -244,7 +244,7 @@ function StartWrittenTest(src, testType)
         questions = pool,
         selectedIndices = {},
         answerKey = answerKey,
-        startedAt = os.time(),
+        startedAt = GetServerTime(),
         fee = config.fee,
     }
     for i = 1, count do
@@ -256,7 +256,7 @@ function StartWrittenTest(src, testType)
         MySQL.insert.await([[
             INSERT INTO truck_licenses (driver_id, citizenid, license_type, status, written_test_attempts, fee_paid, issued_at)
             VALUES (?, ?, ?, 'suspended', 1, ?, ?)
-        ]], { driver.id, citizenid, testType, config.fee, os.time() })
+        ]], { driver.id, citizenid, testType, config.fee, GetServerTime() })
     else
         MySQL.update.await(
             'UPDATE truck_licenses SET written_test_attempts = written_test_attempts + 1 WHERE driver_id = ? AND license_type = ?',
@@ -340,7 +340,7 @@ function SubmitTestResults(src, testType, answers)
         )
 
         if licenseRecord and licenseRecord.written_test_attempts >= config.maxAttempts then
-            local lockUntil = os.time() + config.lockoutSeconds
+            local lockUntil = GetServerTime() + config.lockoutSeconds
             MySQL.update.await(
                 'UPDATE truck_licenses SET locked_until = ? WHERE driver_id = ? AND license_type = ?',
                 { lockUntil, session.driverId, testType }
@@ -395,7 +395,7 @@ function IssueLicense(src, licenseType)
     )
     if not driver then return false end
 
-    local now = os.time()
+    local now = GetServerTime()
 
     -- Calculate expiry for oversized monthly permit (30 days)
     local expiresAt = nil
@@ -454,7 +454,7 @@ function CheckLicense(citizenid, licenseType)
     if not license then return false end
 
     -- Check expiry if applicable
-    if license.expires_at and os.time() > license.expires_at then
+    if license.expires_at and GetServerTime() > license.expires_at then
         MySQL.update.await(
             'UPDATE truck_licenses SET status = ? WHERE id = ?',
             { 'suspended', license.id }
@@ -527,7 +527,7 @@ function StartHAZMATBriefing(src)
     -- Store briefing session
     ActiveBriefings[src] = {
         citizenid = citizenid,
-        startedAt = os.time(),
+        startedAt = GetServerTime(),
     }
 
     -- Return briefing topics (defined in config/cdl.lua or inline)
@@ -636,7 +636,7 @@ function ApplyForCertification(src, certType)
         return false, 'already_certified'
     end
 
-    local now = os.time()
+    local now = GetServerTime()
 
     -- ─── BILKINGTON CARRIER prerequisites ───
     if certType == 'bilkington_carrier' then
@@ -779,7 +779,7 @@ function IssueCertification(src, certType)
     if not driver then return false end
 
     local prereqs = CertPrerequisites[certType]
-    local now = os.time()
+    local now = GetServerTime()
     local expiresAt = nil
     if prereqs and prereqs.validDays then
         expiresAt = now + (prereqs.validDays * 86400)
@@ -848,7 +848,7 @@ function CheckCertification(citizenid, certType)
     if not cert then return false end
 
     -- Check expiry if applicable
-    if cert.expires_at and os.time() > cert.expires_at then
+    if cert.expires_at and GetServerTime() > cert.expires_at then
         MySQL.update.await(
             'UPDATE truck_certifications SET status = ? WHERE id = ?',
             { 'expired', cert.id }
@@ -867,7 +867,7 @@ end
 function RevokeCertification(citizenid, certType, reason)
     if not citizenid or not certType then return false end
 
-    local now = os.time()
+    local now = GetServerTime()
     -- Reinstatement eligible after 30 days
     local reinstatementAt = now + (30 * 86400)
 

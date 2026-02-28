@@ -18,9 +18,9 @@
 -- ============================================================================
 
 ActiveLoads = {}                 -- [bol_id] = active load row data
-local PlayerDropTimestamps = {}  -- [citizenid] = os.time() when they dropped
+local PlayerDropTimestamps = {}  -- [citizenid] = GetServerTime() when they dropped
 local eventCooldowns = {}        -- [src .. ':' .. eventName] = GetGameTimer()
-local stationaryTimers = {}      -- [bol_id] = os.time() when vehicle reported stationary
+local stationaryTimers = {}      -- [bol_id] = GetServerTime() when vehicle reported stationary
 
 -- Configurable timeout before an orphaned load is marked abandoned (seconds)
 local ORPHAN_ABANDON_TIMEOUT = 600 -- 10 minutes
@@ -172,7 +172,7 @@ AddEventHandler('onResourceStart', function(resourceName)
         if not state then
             DB.UpdateBoardState(region, {
                 last_refresh_at = 0,
-                next_refresh_at = os.time(),
+                next_refresh_at = GetServerTime(),
                 refresh_interval_secs = Config.BoardRefreshSeconds or 7200,
                 available_t0 = 0,
                 available_t1 = 0,
@@ -187,7 +187,7 @@ AddEventHandler('onResourceStart', function(resourceName)
     StartBoardRefreshTimers()
 
     -- 5. Sync server time immediately
-    GlobalState.serverTime = os.time()
+    GlobalState.serverTime = GetServerTime()
 
     print('[trucking] Initialization complete.')
 end)
@@ -199,7 +199,7 @@ end)
 
 CreateThread(function()
     while true do
-        GlobalState.serverTime = os.time()
+        GlobalState.serverTime = GetServerTime()
         Wait(30000)
     end
 end)
@@ -220,7 +220,7 @@ RegisterNetEvent('QBCore:Server:OnPlayerLoaded', function()
     EnsureDriverRecord(src)
 
     -- Update last_seen
-    DB.UpdateDriver(citizenid, { last_seen = os.time() })
+    DB.UpdateDriver(citizenid, { last_seen = GetServerTime() })
 
     -- Clear any stored drop timestamp
     local dropTime = PlayerDropTimestamps[citizenid]
@@ -233,12 +233,12 @@ RegisterNetEvent('QBCore:Server:OnPlayerLoaded', function()
     -- Calculate disconnect duration for window extension
     local disconnectedSeconds = 0
     if dropTime then
-        disconnectedSeconds = os.time() - dropTime
+        disconnectedSeconds = GetServerTime() - dropTime
     else
         -- Fallback: use last_seen from driver record (may have been updated by previous drop)
         local driver = DB.GetDriver(citizenid)
         if driver and driver.last_seen then
-            disconnectedSeconds = os.time() - driver.last_seen
+            disconnectedSeconds = GetServerTime() - driver.last_seen
         end
     end
 
@@ -287,7 +287,7 @@ AddEventHandler('playerDropped', function(reason)
     local citizenid = player.PlayerData.citizenid
 
     -- Record drop timestamp for reconnect recovery
-    local now = os.time()
+    local now = GetServerTime()
     PlayerDropTimestamps[citizenid] = now
 
     -- Update last_seen in driver record
@@ -327,7 +327,7 @@ CreateThread(function()
     while true do
         Wait(900000) -- 15 minutes
 
-        local now = os.time()
+        local now = GetServerTime()
         print('[trucking] Running 15-minute maintenance cycle...')
 
         -- 1. Expire stale reservations
@@ -483,7 +483,7 @@ RegisterNetEvent('trucking:server:vehicleStationary', function(bolId)
     local src = source
     if not ValidateLoadOwner(src, bolId) then return end
     if not stationaryTimers[bolId] then
-        stationaryTimers[bolId] = os.time()
+        stationaryTimers[bolId] = GetServerTime()
     end
 end)
 
@@ -497,7 +497,7 @@ end)
 CreateThread(function()
     while true do
         Wait(30000)
-        local now = os.time()
+        local now = GetServerTime()
         for bolId, startTime in pairs(stationaryTimers) do
             if (now - startTime) >= 600 then -- 10 minutes
                 -- Trigger seal break if the load has a seal
@@ -535,7 +535,7 @@ function StartBoardRefreshTimers()
 
         CreateThread(function()
             -- Calculate initial wait: align to the refresh cycle with offset
-            local now = os.time()
+            local now = GetServerTime()
             local cyclePosition = (now % interval)
             local initialWait = offset - cyclePosition
             if initialWait < 0 then
@@ -609,7 +609,7 @@ AddEventHandler('onResourceStop', function(resourceName)
     local players = exports.qbx_core:GetQBPlayers()
     for src, player in pairs(players) do
         if player and player.PlayerData then
-            DB.UpdateDriver(player.PlayerData.citizenid, { last_seen = os.time() })
+            DB.UpdateDriver(player.PlayerData.citizenid, { last_seen = GetServerTime() })
         end
     end
 

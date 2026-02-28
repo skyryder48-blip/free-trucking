@@ -213,7 +213,7 @@ function UpdateDriverReputation(citizenid, changeType, points, bolId, tierOfLoad
         scoreBefore, points, newScore,
         tierBefore, newTier,
         bolId, bolNumber, tierOfLoad,
-        os.time()
+        GetServerTime()
     })
 
     -- Notify player of tier transition if changed
@@ -259,7 +259,7 @@ function CheckBoardAccess(citizenid, loadTier)
 
     -- Check suspension
     if driver.reputation_tier == 'suspended' then
-        if driver.suspended_until and os.time() < driver.suspended_until then
+        if driver.suspended_until and GetServerTime() < driver.suspended_until then
             return false, 'suspended'
         end
     end
@@ -377,7 +377,7 @@ end
 function SuspendDriver(citizenid)
     if not citizenid then return false end
 
-    local suspendUntil = os.time() + 86400  -- +24 hours
+    local suspendUntil = GetServerTime() + 86400  -- +24 hours
 
     MySQL.update.await([[
         UPDATE truck_drivers
@@ -438,7 +438,7 @@ end
 CreateThread(function()
     while true do
         Wait(60000)
-        local now = os.time()
+        local now = GetServerTime()
 
         local suspended = MySQL.query.await([[
             SELECT citizenid FROM truck_drivers
@@ -549,7 +549,7 @@ function UpdateShipperRep(citizenid, shipperId, changeType, points, bolId)
                 preferred_decay_warned = FALSE
             WHERE driver_id = ? AND shipper_id = ?
         ]]
-        updateParams = { newScore, newTier, os.time(), driver.id, shipperId }
+        updateParams = { newScore, newTier, GetServerTime(), driver.id, shipperId }
     elseif points < 0 then
         -- Negative event resets clean streak
         updateQuery = [[
@@ -579,7 +579,7 @@ function UpdateShipperRep(citizenid, shipperId, changeType, points, bolId)
         driver.id, citizenid, shipperId, changeType,
         scoreBefore, points, newScore,
         tierBefore, newTier,
-        bolId, os.time()
+        bolId, GetServerTime()
     })
 
     -- Notify on tier change
@@ -658,7 +658,7 @@ end
 --- Preferred status decays to trusted after 14 days with no deliveries
 ---@return number decayed Count of records decayed
 function CheckPreferredDecay()
-    local decayThreshold = os.time() - 1209600  -- 14 days in seconds
+    local decayThreshold = GetServerTime() - 1209600  -- 14 days in seconds
     local count = 0
 
     -- First pass: warn drivers approaching decay (haven't been warned yet)
@@ -668,7 +668,7 @@ function CheckPreferredDecay()
         WHERE sr.tier = 'preferred'
           AND sr.last_delivery_at < ?
           AND sr.preferred_decay_warned = FALSE
-    ]], { os.time() - 1036800 })  -- 12 days — warn 2 days early
+    ]], { GetServerTime() - 1036800 })  -- 12 days — warn 2 days early
 
     if warnable then
         for _, row in ipairs(warnable) do
@@ -721,7 +721,7 @@ function CheckPreferredDecay()
             ]], {
                 row.driver_id, row.citizenid, row.shipper_id,
                 row.points, newPoints - row.points, newPoints,
-                os.time()
+                GetServerTime()
             })
 
             count = count + 1
@@ -806,7 +806,7 @@ function ApplyClusterFriction(citizenid, shipperId, damagePoints)
                     driver.id, citizenid, otherShipperId,
                     existingRep.points, -frictionPoints, newPoints,
                     existingRep.tier, newTier,
-                    os.time()
+                    GetServerTime()
                 })
 
                 affectedCount = affectedCount + 1

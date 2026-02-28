@@ -25,7 +25,7 @@ function GenerateLoadsForRegion(region)
     end
 
     local generatedCount = 0
-    local now = os.time()
+    local now = GetServerTime()
     local expirySeconds = BoardConfig.LoadExpirySeconds or 7200
 
     -- Fetch active surges for this region to apply to new loads
@@ -228,8 +228,8 @@ function GenerateSingleLoad(region, tier, activeSurges, now, expirySeconds)
         leon_supplier_id = nil,
         is_multi_stop = isMultiStop,
         stop_count = stopCount,
-        posted_at = os.time(),
-        expires_at = os.time() + (BoardConfig.LoadExpirySeconds or 7200),
+        posted_at = GetServerTime(),
+        expires_at = GetServerTime() + (BoardConfig.LoadExpirySeconds or 7200),
         board_region = region,
         -- Delivery window stored for use at acceptance time
         _window_seconds = windowSeconds,
@@ -363,7 +363,7 @@ end
 
 ---@param region string
 function RefreshBoard(region)
-    local now = os.time()
+    local now = GetServerTime()
     print(('[trucking] Refreshing board for region: %s'):format(region))
 
     -- 1. Expire any loads that are past their expiry time
@@ -456,7 +456,7 @@ end
 --- Run surge detection for a region and create surge events if conditions are met
 ---@param region string
 function DetectSurges(region)
-    local now = os.time()
+    local now = GetServerTime()
 
     -- 1. Open contract progress surge: if any open contract is >50% filled,
     --    add a 20% surge on related cargo type

@@ -72,7 +72,7 @@ function CreateConvoy(src, convoyType)
         companyId = company.company_id
     end
 
-    local now = os.time()
+    local now = GetServerTime()
 
     -- Create convoy record in database
     local convoyId = MySQL.insert.await([[
@@ -298,7 +298,7 @@ function StartConvoy(convoyId)
         return false, 'need_minimum_two_members'
     end
 
-    local now = os.time()
+    local now = GetServerTime()
 
     MySQL.update.await(
         'UPDATE truck_convoys SET status = ?, started_at = ? WHERE id = ?',
@@ -424,7 +424,7 @@ end
 function CompleteConvoy(convoyId)
     if not convoyId then return false end
 
-    local now = os.time()
+    local now = GetServerTime()
 
     MySQL.update.await(
         'UPDATE truck_convoys SET status = ?, completed_at = ? WHERE id = ?',
@@ -506,7 +506,7 @@ function RecordConvoyDelivery(convoyId, citizenid)
     if not convoyId or not citizenid then return end
     if not ConvoyMembers[convoyId] or not ConvoyMembers[convoyId][citizenid] then return end
 
-    ConvoyMembers[convoyId][citizenid].deliveredAt = os.time()
+    ConvoyMembers[convoyId][citizenid].deliveredAt = GetServerTime()
 
     -- Check if all members have now delivered
     local totalMembers = 0

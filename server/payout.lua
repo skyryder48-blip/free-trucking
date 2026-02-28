@@ -376,7 +376,7 @@ function CalculatePayout(activeLoad, bolRecord, deliveryData)
     -- ========================================================================
     local nightMod = 0
     local nightApplied = false
-    local hour = tonumber(os.date('%H'))
+    local hour = tonumber(os.date('%H', GetServerTime()))
     local nightStart = Economy.NightHaulStart or 22
     local nightEnd = Economy.NightHaulEnd or 6
 

@@ -224,7 +224,7 @@ function PostMilitaryContract()
     local route = ConvoyRoutes[math.random(#ConvoyRoutes)]
     local payout = math.random(classInfo.payout_base, classInfo.payout_max)
 
-    local bolNumber = 'MIL-' .. os.time() .. '-' .. math.random(100, 999)
+    local bolNumber = 'MIL-' .. GetServerTime() .. '-' .. math.random(100, 999)
 
     local contractData = {
         bol_number          = bolNumber,
@@ -233,8 +233,8 @@ function PostMilitaryContract()
         description         = classInfo.description,
         route               = route,
         payout              = payout,
-        posted_at           = os.time(),
-        expires_at          = os.time() + 7200, -- 2 hour window to accept
+        posted_at           = GetServerTime(),
+        expires_at          = GetServerTime() + 7200, -- 2 hour window to accept
         status              = 'available',
         accepted_by         = nil,
     }
@@ -263,8 +263,8 @@ function PostMilitaryContract()
             z = route.waypoints[#route.waypoints].z,
         }),
         payout,
-        os.time(),
-        os.time() + 7200,
+        GetServerTime(),
+        GetServerTime() + 7200,
     })
 
     MilitaryContractsIssued = MilitaryContractsIssued + 1
@@ -312,7 +312,7 @@ function AcceptMilitaryContract(src, bolNumber)
     ]], { bolNumber })
 
     if not contract then return false, 'contract_not_found' end
-    if contract.expires_at <= os.time() then return false, 'contract_expired' end
+    if contract.expires_at <= GetServerTime() then return false, 'contract_expired' end
 
     -- Accept the contract
     MySQL.update.await([[
@@ -337,7 +337,7 @@ function AcceptMilitaryContract(src, bolNumber)
         contract.origin_label,
         contract.destination_label,
         contract.cargo_subtype or 'Military Cargo',
-        os.time(),
+        GetServerTime(),
     })
 
     -- Create active load
@@ -350,8 +350,8 @@ function AcceptMilitaryContract(src, bolNumber)
         contract.id,
         bolId,
         citizenid,
-        os.time(),
-        os.time() + 5400, -- 90 minute window
+        GetServerTime(),
+        GetServerTime() + 5400, -- 90 minute window
         contract.base_payout_rental,
     })
 
@@ -367,8 +367,8 @@ function AcceptMilitaryContract(src, bolNumber)
             classification      = contract.cargo_subtype,
             payout              = contract.base_payout_rental,
             status              = 'at_origin',
-            accepted_at         = os.time(),
-            window_expires      = os.time() + 5400,
+            accepted_at         = GetServerTime(),
+            window_expires      = GetServerTime() + 5400,
             convoy_id           = nil,
             origin_coords       = json.decode(contract.origin_coords),
             destination_coords  = json.decode(contract.destination_coords),
@@ -428,7 +428,7 @@ function SpawnMilitaryConvoy(loadData)
         waypoints           = route.waypoints,
         current_waypoint    = 1,
         status              = 'forming',
-        spawned_at          = os.time(),
+        spawned_at          = GetServerTime(),
 
         -- Escort state
         lead_escort = {
@@ -514,12 +514,12 @@ function HandleEscortDestroyed(convoyId, escortType)
     local key = escortType .. '_escort'
     if convoy[key] then
         convoy[key].alive = false
-        convoy[key].destroyed_at = os.time()
+        convoy[key].destroyed_at = GetServerTime()
     end
 
     -- Check if both escorts are destroyed
     if not convoy.lead_escort.alive and not convoy.trail_escort.alive then
-        convoy.unguarded_window_start = os.time()
+        convoy.unguarded_window_start = GetServerTime()
 
         print(('[Trucking Military] Both escorts destroyed for convoy %d — %d second window')
             :format(convoyId, ESCORT_UNGUARDED_WINDOW))
@@ -547,8 +547,8 @@ function HandleConvoyStopState(convoyId, isStopped)
 
     if isStopped then
         if not convoy.stopped_since then
-            convoy.stopped_since = os.time()
-        elseif (os.time() - convoy.stopped_since) >= ESCORT_INVESTIGATE_DELAY and not convoy.investigating then
+            convoy.stopped_since = GetServerTime()
+        elseif (GetServerTime() - convoy.stopped_since) >= ESCORT_INVESTIGATE_DELAY and not convoy.investigating then
             convoy.investigating = true
 
             -- Tell client escorts to investigate
@@ -635,7 +635,7 @@ function HandleMilitaryBreach(src, loadId)
             citizenid,
             json.encode({ classification = activeLoad.classification }),
             json.encode({ x = coords.x, y = coords.y, z = coords.z }),
-            os.time(),
+            GetServerTime(),
         })
     end
 
@@ -657,7 +657,7 @@ end
 function LongConConsequences(citizenid)
     if not citizenid then return false end
 
-    local now = os.time()
+    local now = GetServerTime()
     local repHit = Config.LongConReputationHit or 400
     local clearanceSuspendDays = Config.LongConClearanceSuspendDays or 30
     local t3SuspendDays = 14
@@ -790,7 +790,7 @@ function CompleteMilitaryDelivery(src, loadId)
             total_earnings = total_earnings + ?,
             last_seen = ?
         WHERE citizenid = ?
-    ]], { payout, os.time(), citizenid })
+    ]], { payout, GetServerTime(), citizenid })
 
     -- Update BOL status
     if activeLoad.bol_id then
@@ -798,7 +798,7 @@ function CompleteMilitaryDelivery(src, loadId)
             UPDATE truck_bols
             SET bol_status = 'delivered', delivered_at = ?, final_payout = ?
             WHERE id = ?
-        ]], { os.time(), payout, activeLoad.bol_id })
+        ]], { GetServerTime(), payout, activeLoad.bol_id })
     end
 
     -- Update load status
@@ -998,7 +998,7 @@ CreateThread(function()
     while true do
         Wait(5000) -- Check every 5 seconds
 
-        local now = os.time()
+        local now = GetServerTime()
 
         for convoyId, convoy in pairs(ActiveConvoys) do
             -- Check unguarded window expiry

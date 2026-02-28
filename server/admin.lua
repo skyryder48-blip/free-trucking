@@ -201,7 +201,7 @@ RegisterNetEvent('trucking:server:admin:adjustReputation', function(citizenid, c
         newScore,
         driver.reputation_tier,
         newTier,
-        os.time(),
+        GetServerTime(),
     })
 
     -- Notify target player if online
@@ -249,7 +249,7 @@ RegisterNetEvent('trucking:server:admin:suspendDriver', function(citizenid, dura
     durationHours = tonumber(durationHours) or 24
     reason = reason or 'Admin suspension'
 
-    local suspendedUntil = os.time() + (durationHours * 3600)
+    local suspendedUntil = GetServerTime() + (durationHours * 3600)
 
     MySQL.update.await([[
         UPDATE truck_drivers
@@ -377,7 +377,7 @@ RegisterNetEvent('trucking:server:admin:forceComplete', function(bolId, reason)
     if deposit then
         MySQL.update.await([[
             UPDATE truck_deposits SET status = 'returned', resolved_at = ? WHERE id = ?
-        ]], { os.time(), deposit.id })
+        ]], { GetServerTime(), deposit.id })
 
         local playerSrc = exports.qbx_core:GetPlayerByCitizenId(citizenid)
         if playerSrc then
@@ -411,7 +411,7 @@ RegisterNetEvent('trucking:server:admin:forceComplete', function(bolId, reason)
             UPDATE truck_bols
             SET bol_status = 'delivered', delivered_at = ?, final_payout = ?
             WHERE bol_number = ?
-        ]], { os.time(), basePayout, bolNumber })
+        ]], { GetServerTime(), basePayout, bolNumber })
     end
 
     -- Update load status
@@ -494,7 +494,7 @@ RegisterNetEvent('trucking:server:admin:forceAbandon', function(bolId, reason)
     if deposit then
         MySQL.update.await([[
             UPDATE truck_deposits SET status = 'returned', resolved_at = ? WHERE id = ?
-        ]], { os.time(), deposit.id })
+        ]], { GetServerTime(), deposit.id })
 
         local playerSrc = exports.qbx_core:GetPlayerByCitizenId(citizenid)
         if playerSrc then
@@ -612,7 +612,7 @@ RegisterNetEvent('trucking:server:admin:createSurge', function(data)
         return
     end
 
-    local now = os.time()
+    local now = GetServerTime()
     local expiresAt = now + (durationMinutes * 60)
 
     local surgeId = MySQL.insert.await([[
@@ -694,14 +694,14 @@ RegisterNetEvent('trucking:server:admin:cancelSurge', function(surgeId)
 
     MySQL.update.await([[
         UPDATE truck_surge_events SET status = 'cancelled', ended_at = ? WHERE id = ?
-    ]], { os.time(), surgeId })
+    ]], { GetServerTime(), surgeId })
 
     -- Decrement board surge count
     MySQL.update([[
         UPDATE truck_board_state
         SET surge_active_count = GREATEST(0, surge_active_count - 1), updated_at = ?
         WHERE region = ?
-    ]], { os.time(), surge.region })
+    ]], { GetServerTime(), surge.region })
 
     LogAdminAction(src, 'cancel_surge', {
         surge_id    = surgeId,
@@ -747,7 +747,7 @@ RegisterNetEvent('trucking:server:admin:forceRefresh', function(region)
     -- Update board state
     MySQL.update([[
         UPDATE truck_board_state SET last_refresh_at = ?, updated_at = ? WHERE region = ?
-    ]], { os.time(), os.time(), region })
+    ]], { GetServerTime(), GetServerTime(), region })
 
     -- Notify all players to refresh their board views
     TriggerClientEvent('trucking:client:boardRefresh', -1, { region = region })
@@ -868,7 +868,7 @@ RegisterNetEvent('trucking:server:admin:approveClaim', function(claimId)
         UPDATE truck_insurance_claims
         SET status = 'approved', payout_at = ?
         WHERE id = ?
-    ]], { os.time() + 900, claimId })
+    ]], { GetServerTime() + 900, claimId })
 
     LogAdminAction(src, 'approve_claim', {
         claim_id    = claimId,
@@ -918,7 +918,7 @@ RegisterNetEvent('trucking:server:admin:denyClaim', function(claimId, reason)
         UPDATE truck_insurance_claims
         SET status = 'denied', resolved_at = ?
         WHERE id = ?
-    ]], { os.time(), claimId })
+    ]], { GetServerTime(), claimId })
 
     -- Notify the claimant if online
     local targetSrc = exports.qbx_core:GetPlayerByCitizenId(claim.citizenid)
@@ -1017,12 +1017,12 @@ RegisterNetEvent('trucking:server:admin:getServerStats', function()
     local totalCompletedToday = MySQL.scalar.await([[
         SELECT COUNT(*) FROM truck_bols
         WHERE bol_status = 'delivered' AND delivered_at >= ?
-    ]], { os.time() - 86400 }) or 0
+    ]], { GetServerTime() - 86400 }) or 0
 
     local totalPayoutsToday = MySQL.scalar.await([[
         SELECT COALESCE(SUM(final_payout), 0) FROM truck_bols
         WHERE bol_status = 'delivered' AND delivered_at >= ?
-    ]], { os.time() - 86400 }) or 0
+    ]], { GetServerTime() - 86400 }) or 0
 
     local pendingClaims = MySQL.scalar.await([[
         SELECT COUNT(*) FROM truck_insurance_claims

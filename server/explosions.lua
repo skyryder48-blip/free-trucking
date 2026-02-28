@@ -314,7 +314,7 @@ function RegisterFlammableVehicle(plate, data)
         fill_level  = data.fill_level or 1.0,
         cargo_type  = data.cargo_type or 'unknown',
         hazmat_class = data.hazmat_class or nil,
-        registered_at = os.time(),
+        registered_at = GetServerTime(),
     }
 
     FlammableVehicles[plate] = registrationData
@@ -410,8 +410,8 @@ local function ExecutePhase(phase, coords, plate, sequenceId)
             damage_per_tick = phase.zone_damage_per_tick or 0,
             vehicle_damage  = phase.zone_vehicle_damage or 0,
             tick_interval   = phase.zone_tick_interval or 2000,
-            expires_at      = os.time() + (phase.persist_duration),
-            created_at      = os.time(),
+            expires_at      = GetServerTime() + (phase.persist_duration),
+            created_at      = GetServerTime(),
         }
     end
 end
@@ -439,7 +439,7 @@ function HandleVehicleExplosion(plate, coords)
     end
 
     local fillLevel = vehicleData.fill_level or 1.0
-    local sequenceId = plate .. '_' .. os.time()
+    local sequenceId = plate .. '_' .. GetServerTime()
 
     -- Use provided coords or try to find the vehicle
     if not coords then
@@ -453,7 +453,7 @@ function HandleVehicleExplosion(plate, coords)
         profile     = vehicleData.profile,
         fill_level  = fillLevel,
         coords      = coords,
-        started_at  = os.time(),
+        started_at  = GetServerTime(),
         phases_completed = 0,
         total_phases = #profile.phases,
     }
@@ -619,7 +619,7 @@ CreateThread(function()
     while true do
         Wait(10000) -- Check every 10 seconds
 
-        local now = os.time()
+        local now = GetServerTime()
         local expired = {}
 
         for zoneId, zone in pairs(ActiveFireZones) do
@@ -652,7 +652,7 @@ CreateThread(function()
     while true do
         Wait(1000) -- 1 second tick
 
-        local now = os.time()
+        local now = GetServerTime()
 
         for zoneId, zone in pairs(ActiveFireZones) do
             if zone.coords and zone.effect and zone.effect ~= 'fire' then

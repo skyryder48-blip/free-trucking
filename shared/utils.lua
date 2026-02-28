@@ -10,29 +10,61 @@
 -- ═══════════════════════════════════════════════════════════════
 -- SERVER TIME SYNC
 -- ═══════════════════════════════════════════════════════════════
--- Server pushes os.time() into GlobalState every 30 seconds.
--- Client reads GlobalState.serverTime for absolute timestamps.
--- All payout/reputation/BOL timestamps remain server-authoritative.
+-- Server fetches UNIX_TIMESTAMP() from MySQL on resource start
+-- and re-syncs every 30 seconds. Between syncs, elapsed time is
+-- derived from GetGameTimer() offset. Client reads GlobalState.
+-- os.time() is NOT used anywhere in this resource.
 
 if IsDuplicityVersion() then
-    -- Server-side: sync time to GlobalState every 30 seconds
+    local _serverTimeBase = 0   -- UNIX timestamp from last DB sync
+    local _gameTimerBase  = 0   -- GetGameTimer() value at last DB sync
+
+    --- Sync server time from MySQL UNIX_TIMESTAMP().
+    local function SyncServerTime()
+        local dbTime = MySQL.scalar.await('SELECT UNIX_TIMESTAMP()')
+        if dbTime then
+            _serverTimeBase = dbTime
+            _gameTimerBase  = GetGameTimer()
+            GlobalState.serverTime = dbTime
+        end
+    end
+
+    -- Initial sync + periodic refresh
     CreateThread(function()
+        -- Wait for oxmysql to be ready
+        while not MySQL or not MySQL.scalar then
+            Wait(100)
+        end
+        SyncServerTime()
+
         while true do
-            GlobalState.serverTime = os.time()
             Wait(30000)
+            SyncServerTime()
         end
     end)
-end
 
---- Get the current server-synced UNIX timestamp (client-safe).
---- On the server this returns os.time() directly.
---- On the client this returns the last GlobalState sync value.
----@return number timestamp UNIX epoch seconds
-function GetServerTime()
-    if IsDuplicityVersion() then
-        return os.time()
+    --- Get current UNIX timestamp derived from DB sync + GetGameTimer() offset.
+    ---@return number timestamp UNIX epoch seconds
+    function GetServerTime()
+        if _serverTimeBase == 0 then
+            -- Before first sync, do a blocking DB call
+            local dbTime = MySQL.scalar.await('SELECT UNIX_TIMESTAMP()')
+            if dbTime then
+                _serverTimeBase = dbTime
+                _gameTimerBase  = GetGameTimer()
+                GlobalState.serverTime = dbTime
+                return dbTime
+            end
+            return 0
+        end
+        return _serverTimeBase + math.floor((GetGameTimer() - _gameTimerBase) / 1000)
     end
-    return GlobalState.serverTime or 0
+else
+    --- Client-side: read server-synced timestamp from GlobalState.
+    ---@return number timestamp UNIX epoch seconds
+    function GetServerTime()
+        return GlobalState.serverTime or 0
+    end
 end
 
 --- Get elapsed milliseconds since a GetGameTimer() start point.
@@ -236,23 +268,17 @@ end
 
 --- Check if the current server time falls within the night haul
 --- premium window (default 22:00 - 06:00).
---- Uses os.time() on server, GlobalState on client.
+--- Uses DB-synced GetServerTime() on both sides.
 ---@return boolean isNight True if current hour is within the night window
 function IsNightHaul()
     if not Economy then return false end
 
     local nightStart = Economy.NightHaulStart or 22
     local nightEnd   = Economy.NightHaulEnd   or 6
-    local currentHour
 
-    if IsDuplicityVersion() then
-        currentHour = tonumber(os.date('%H'))
-    else
-        -- Client-side: derive hour from server-synced timestamp
-        local serverTime = GlobalState.serverTime
-        if not serverTime or serverTime == 0 then return false end
-        currentHour = tonumber(os.date('%H', serverTime))
-    end
+    local serverTime = GetServerTime()
+    if not serverTime or serverTime == 0 then return false end
+    local currentHour = tonumber(os.date('%H', serverTime))
 
     if not currentHour then return false end
 

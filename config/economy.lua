@@ -22,7 +22,7 @@ Economy.ServerMultiplier = 1.0
 -- NIGHT HAUL PREMIUM
 -- ─────────────────────────────────────────────
 -- Deliveries completed during night hours receive a premium.
--- Server time is used (os.date on server, GlobalState.serverTime on client).
+-- Server time is DB-synced via GetServerTime() on both sides.
 Economy.NightHaulPremium = 0.07    -- +7% payout bonus
 Economy.NightHaulStart   = 22      -- 22:00 server time
 Economy.NightHaulEnd     = 6       -- 06:00 server time

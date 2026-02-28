@@ -53,8 +53,8 @@ RegisterNetEvent('trucking:server:reserveLoad', function(loadId)
         return
     end
 
-    if load.tier >= 2 and driver.reservation_cooldown and driver.reservation_cooldown > os.time() then
-        local remaining = driver.reservation_cooldown - os.time()
+    if load.tier >= 2 and driver.reservation_cooldown and driver.reservation_cooldown > GetServerTime() then
+        local remaining = driver.reservation_cooldown - GetServerTime()
         lib.notify(src, {
             title = 'Reservation Cooldown',
             description = ('Wait %d seconds before reserving Tier 2+ loads.'):format(remaining),
@@ -64,7 +64,7 @@ RegisterNetEvent('trucking:server:reserveLoad', function(loadId)
     end
 
     -- Attempt to reserve (atomic: only succeeds if load is still available)
-    local reserveUntil = os.time() + (Config.ReservationSeconds or 180)
+    local reserveUntil = GetServerTime() + (Config.ReservationSeconds or 180)
     local affected = DB.ReserveLoad(loadId, citizenid, reserveUntil)
 
     if affected == 0 then
@@ -111,7 +111,7 @@ RegisterNetEvent('trucking:server:cancelReservation', function(loadId)
         local warningThreshold = Config.ReservationWarning or 3
         local cooldownDuration = Config.ReservationCooldown or 600
         if newReleases >= (warningThreshold + 2) then -- 5 releases (3 warning + 2 more)
-            updates.reservation_cooldown = os.time() + cooldownDuration
+            updates.reservation_cooldown = GetServerTime() + cooldownDuration
             updates.reservation_releases = 0 -- reset counter after cooldown applied
             lib.notify(src, {
                 title = 'Reservation Cooldown',
@@ -222,7 +222,7 @@ RegisterNetEvent('trucking:server:acceptLoad', function(loadId, vehicleData)
               AND valid_from <= ?
               AND (valid_until IS NULL OR valid_until >= ?)
             LIMIT 1
-        ]], { citizenid, os.time(), os.time() })
+        ]], { citizenid, GetServerTime(), GetServerTime() })
 
         if not policy then
             lib.notify(src, {
@@ -281,7 +281,7 @@ RegisterNetEvent('trucking:server:acceptLoad', function(loadId, vehicleData)
         baseWindowMinutes = baseWindowMinutes + (load.stop_count * 5)
     end
     local windowSeconds = math.floor(baseWindowMinutes * 60)
-    local now = os.time()
+    local now = GetServerTime()
     local windowExpiresAt = now + windowSeconds
 
     -- 11. Create the BOL record
@@ -505,7 +505,7 @@ RegisterNetEvent('trucking:server:departOrigin', function(bolId)
     -- Validate seal (if required by cargo type)
     if load.requires_seal and activeLoad.seal_status == 'not_applied' then
         -- Auto-apply seal on departure if not yet applied
-        local sealNumber = ('SEAL-%s-%05d'):format(os.date('%y%m'), math.random(10000, 99999))
+        local sealNumber = ('SEAL-%s-%05d'):format(os.date('%y%m', GetServerTime()), math.random(10000, 99999))
         activeLoad.seal_status = 'sealed'
         activeLoad.seal_number = sealNumber
 
@@ -528,7 +528,7 @@ RegisterNetEvent('trucking:server:departOrigin', function(bolId)
     end
 
     -- Set departed_at and update status
-    local now = os.time()
+    local now = GetServerTime()
     activeLoad.status = 'in_transit'
     activeLoad.departed_at = now
     ActiveLoads[bolId] = activeLoad
@@ -686,7 +686,7 @@ RegisterNetEvent('trucking:server:deliverLoad', function(bolId)
     end
 
     -- 1. Calculate payout using the payout engine
-    local now = os.time()
+    local now = GetServerTime()
     local deliveryData = {
         delivered_at = now,
     }
@@ -1000,7 +1000,7 @@ function ApplyReputationChange(citizenid, changeType, tier, bolId, bolNumber)
 
     -- If suspended (score = 0), set 24-hour suspension
     if tierAfter == 'suspended' and tierBefore ~= 'suspended' then
-        updates.suspended_until = os.time() + 86400 -- 24 hours
+        updates.suspended_until = GetServerTime() + 86400 -- 24 hours
     end
 
     DB.UpdateDriver(citizenid, updates)
@@ -1117,7 +1117,7 @@ function UpdateShipperRepOnDelivery(citizenid, shipperId, tier, bolId, activeLoa
         tier = tierAfter,
         deliveries_completed = (current and current.deliveries_completed or 0) + 1,
         current_clean_streak = cleanStreak,
-        last_delivery_at = os.time(),
+        last_delivery_at = GetServerTime(),
     })
 
     -- Log the change
@@ -1284,7 +1284,7 @@ RegisterNetEvent('trucking:server:acceptTransfer', function(transferData)
     if not driver then return end
 
     -- Transfer the active load
-    local now = os.time()
+    local now = GetServerTime()
     activeLoad.citizenid = citizenid
     activeLoad.driver_id = driver.id
     ActiveLoads[bolId] = activeLoad
@@ -1362,7 +1362,7 @@ RegisterNetEvent('trucking:server:sealBreak', function(bolId, reason)
     -- Only break if currently sealed
     if activeLoad.seal_status ~= 'sealed' then return end
 
-    local now = os.time()
+    local now = GetServerTime()
     activeLoad.seal_status = 'broken'
     activeLoad.seal_broken_at = now
     ActiveLoads[bolId] = activeLoad
@@ -1520,7 +1520,7 @@ RegisterNetEvent('trucking:server:integrityEvent', function(bolId, eventData)
         integrityAfter,
         eventData.speed,
         eventData.coords and json.encode(eventData.coords) or nil,
-        os.time(),
+        GetServerTime(),
     })
 
     -- Log BOL event
@@ -1608,7 +1608,7 @@ RegisterNetEvent('trucking:server:weighStationStamp', function(bolId, stationDat
         stationData and stationData.station_id or 'unknown',
         stationData and stationData.station_label or 'Unknown Station',
         stationData and stationData.station_region or 'los_santos',
-        os.time(),
+        GetServerTime(),
     })
 
     -- Log BOL event

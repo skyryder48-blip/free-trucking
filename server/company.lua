@@ -68,7 +68,7 @@ function CreateCompany(src, companyName)
         return false, 'name_taken'
     end
 
-    local now = os.time()
+    local now = GetServerTime()
 
     -- Create company record
     local companyId = MySQL.insert.await(
@@ -146,7 +146,7 @@ function InviteMember(src, targetCitizenId)
         companyId = company.id,
         companyName = company.company_name,
         inviterCitizenId = citizenid,
-        expiresAt = os.time() + 60,
+        expiresAt = GetServerTime() + 60,
     }
 
     -- Notify target player if online
@@ -180,7 +180,7 @@ RegisterNetEvent('trucking:server:acceptCompanyInvite', function()
     end
 
     -- Check invite expiry
-    if os.time() > invite.expiresAt then
+    if GetServerTime() > invite.expiresAt then
         PendingInvites[citizenid] = nil
         lib.notify(src, { title = 'Company', description = 'Invite has expired.', type = 'error' })
         return
@@ -200,7 +200,7 @@ RegisterNetEvent('trucking:server:acceptCompanyInvite', function()
     -- Add as member
     MySQL.insert.await(
         'INSERT INTO truck_company_members (company_id, citizenid, role, joined_at) VALUES (?, ?, ?, ?)',
-        { invite.companyId, citizenid, 'driver', os.time() }
+        { invite.companyId, citizenid, 'driver', GetServerTime() }
     )
 
     PendingInvites[citizenid] = nil
@@ -709,7 +709,7 @@ end)
 CreateThread(function()
     while true do
         Wait(30000)
-        local now = os.time()
+        local now = GetServerTime()
         for targetCid, invite in pairs(PendingInvites) do
             if now > invite.expiresAt then
                 PendingInvites[targetCid] = nil
