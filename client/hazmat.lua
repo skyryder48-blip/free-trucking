@@ -69,7 +69,7 @@ local HAZMAT_CLASSES = {
         ptfxColor       = { r = 1.0, g = 0.7, b = 0.0 },  -- yellow/orange radiation
         soundSet        = 'dlc_heist_biolab_prep_ambience_sounds',
         soundName       = 'Electrical_Interference',       -- Geiger counter approximation
-        cleanupItem     = 'hazmat_cleanup_specialist',     -- specialist item required
+        cleanupItem     = 'hazmat_cleanup_kit',
         cleanupDuration = 60000,
     },
     [8] = {
@@ -509,14 +509,13 @@ local function AttemptCleanup(zoneId)
     local classDef = zoneData.classDef
     if not classDef then return end
 
-    -- Check for required cleanup item
+    -- Check for required cleanup item (protected against missing ox_inventory)
     local requiredItem = classDef.cleanupItem
-    local hasItem = exports.ox_inventory:Search('count', requiredItem) > 0
+    local itemOk, itemResult = pcall(exports.ox_inventory.Search, exports.ox_inventory, 'count', requiredItem)
+    local hasItem = itemOk and itemResult > 0
 
     if not hasItem then
-        local itemLabel = requiredItem == 'hazmat_cleanup_specialist'
-            and 'Specialist Cleanup Kit'
-            or 'Hazmat Cleanup Kit'
+        local itemLabel = 'HAZMAT Cleanup Kit'
 
         lib.notify({
             title       = 'Hazmat Cleanup',
@@ -588,9 +587,10 @@ CreateThread(function()
 
             -- Within cleanup range (edge of zone)
             if dist < zoneData.radius + 3.0 and dist > zoneData.radius - 5.0 then
-                -- Check if player has cleanup item
+                -- Check if player has cleanup item (protected against missing ox_inventory)
                 local requiredItem = zoneData.classDef.cleanupItem
-                local hasItem = exports.ox_inventory:Search('count', requiredItem) > 0
+                local cleanupOk, cleanupResult = pcall(exports.ox_inventory.Search, exports.ox_inventory, 'count', requiredItem)
+                local hasItem = cleanupOk and cleanupResult > 0
 
                 if hasItem and not cleanupInProgress then
                     lib.showTextUI(string.format('[E] - Clean up Class %d %s hazard', zoneData.class, zoneData.classDef.name), {

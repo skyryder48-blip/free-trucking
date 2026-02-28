@@ -33,7 +33,7 @@ local bolCounterMonth = '' -- 'YYMM' string for the current month
 --- Initialize the BOL counter from the database.
 --- Called on resource start to pick up where we left off.
 function InitBOLCounter()
-    local currentMonth = os.date('%y%m')
+    local currentMonth = os.date('%y%m', GetServerTime())
     bolCounterMonth = currentMonth
 
     -- Find the highest BOL number for this month
@@ -75,7 +75,7 @@ end
 --- Format: BOL-YYMM-XXXXX (e.g., BOL-2601-00042)
 ---@return string bolNumber
 function GenerateBOLNumber()
-    local currentMonth = os.date('%y%m')
+    local currentMonth = os.date('%y%m', GetServerTime())
 
     -- Reset counter if we rolled into a new month
     if currentMonth ~= bolCounterMonth then
@@ -109,7 +109,7 @@ end)
 function CreateBOL(loadData, driverData, companyData)
     local cargo = CargoTypes and CargoTypes[loadData.cargo_type] or {}
     local bolNumber = loadData.bol_number or GenerateBOLNumber()
-    local now = os.time()
+    local now = GetServerTime()
 
     -- Determine license class from load requirements
     local licenseClass = nil
@@ -238,7 +238,7 @@ function LogBOLEvent(bolId, bolNumber, citizenid, eventType, eventData, coords)
         event_type = eventType,
         event_data = eventData,
         coords = coordsTable,
-        occurred_at = os.time(),
+        occurred_at = GetServerTime(),
     })
 end
 
@@ -337,7 +337,7 @@ end
 function DisposeBOLItem(bolId)
     return DB.UpdateBOL(bolId, {
         item_in_inventory = false,
-        item_disposed_at = os.time(),
+        item_disposed_at = GetServerTime(),
     })
 end
 

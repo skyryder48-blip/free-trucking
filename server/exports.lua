@@ -24,7 +24,7 @@ exports('GetDriverLicense', function(citizenid, licenseType)
 
     if not license then return nil end
 
-    local now = os.time()
+    local now = GetServerTime()
     local isActive = license.status == 'active'
 
     -- Check if license is time-locked (failed test cooldown)
@@ -62,7 +62,7 @@ exports('GetDriverCertification', function(citizenid, certType)
 
     if not cert then return nil end
 
-    local now = os.time()
+    local now = GetServerTime()
     local isActive = cert.status == 'active'
 
     -- Check expiration
@@ -342,7 +342,7 @@ exports('TriggerReputationEvent', function(citizenid, eventType, context)
     -- Handle suspension
     local suspendedUntil = nil
     if newScore == 0 then
-        suspendedUntil = os.time() + 86400 -- 24-hour lockout
+        suspendedUntil = GetServerTime() + 86400 -- 24-hour lockout
     end
 
     -- Update driver record
@@ -371,7 +371,7 @@ exports('TriggerReputationEvent', function(citizenid, eventType, context)
         newTier,
         context.bol_number,
         context.tier_of_load,
-        os.time(),
+        GetServerTime(),
     })
 
     -- Notify player if online

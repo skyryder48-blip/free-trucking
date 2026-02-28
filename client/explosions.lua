@@ -730,6 +730,122 @@ RegisterNetEvent('trucking:client:executeExplosion', function(data)
     end
 end)
 
+--- Server triggers a specific explosion phase (for multi-phase sequences)
+RegisterNetEvent('trucking:client:explosionPhase', function(data)
+    if not data or not data.coords then return end
+    local coords = vector3(data.coords.x or data.coords[1], data.coords.y or data.coords[2], data.coords.z or data.coords[3])
+    local expType = data.explosionType or 2
+    local radius = data.radius or 5.0
+    AddExplosion(coords.x, coords.y, coords.z, expType, radius, true, false, data.cameraShake or 1.0)
+end)
+
+--- Server creates a fuel fire zone at location
+RegisterNetEvent('trucking:client:fuelFireZone', function(data)
+    if not data or not data.coords then return end
+    local coords = vector3(data.coords.x or data.coords[1], data.coords.y or data.coords[2], data.coords.z or data.coords[3])
+    local radius = data.radius or 15.0
+    local duration = data.duration or FIRE_ZONE_DURATION
+    CreateFireZone(coords, radius, duration)
+end)
+
+--- Server sends periodic hazard zone damage tick
+RegisterNetEvent('trucking:client:hazardZoneTick', function(data)
+    if not data then return end
+    local playerCoords = GetEntityCoords(cache.ped)
+    if data.coords then
+        local zoneCoords = vector3(data.coords.x or data.coords[1], data.coords.y or data.coords[2], data.coords.z or data.coords[3])
+        local dist = #(playerCoords - zoneCoords)
+        if dist < (data.radius or 30.0) then
+            local health = GetEntityHealth(cache.ped)
+            if health > 100 then
+                SetEntityHealth(cache.ped, health - (data.damage or 2))
+            end
+        end
+    end
+end)
+
+--- Server notifies HAZMAT zone has been cleaned up (by another player)
+RegisterNetEvent('trucking:client:hazmatCleanedUp', function(data)
+    if not data then return end
+    lib.notify({
+        title = 'Hazmat Cleaned',
+        description = 'A hazmat zone has been neutralized.',
+        type = 'success',
+    })
+end)
+
+--- Server notifies HAZMAT fire ignition
+RegisterNetEvent('trucking:client:hazmatFire', function(data)
+    if not data or not data.coords then return end
+    local coords = vector3(data.coords.x or data.coords[1], data.coords.y or data.coords[2], data.coords.z or data.coords[3])
+    AddExplosion(coords.x, coords.y, coords.z, 12, data.radius or 5.0, true, false, 1.0)
+    lib.notify({
+        title = 'HAZMAT Fire',
+        description = 'Hazardous material has ignited!',
+        type = 'error',
+        duration = 6000,
+    })
+end)
+
+--- Server creates a HAZMAT spill zone visible to nearby players
+RegisterNetEvent('trucking:client:hazmatSpillZone', function(data)
+    if not data or not data.coords or not data.hazmatClass then return end
+    local coords = vector3(data.coords.x or data.coords[1], data.coords.y or data.coords[2], data.coords.z or data.coords[3])
+    local playerCoords = GetEntityCoords(cache.ped)
+    if #(playerCoords - coords) > 300.0 then return end
+    CreateHazmatZone(data.hazmatClass, coords, data.loadId)
+end)
+
+--- Server requests removal of a fire zone
+RegisterNetEvent('trucking:client:removeFireZone', function(data)
+    if not data then return end
+    local index = data.zoneIndex
+    if index and activeFireZones[index] then
+        local fireData = activeFireZones[index]
+        if fireData.zone then fireData.zone:remove() end
+        if fireData.particles then
+            for _, handle in ipairs(fireData.particles) do
+                if DoesParticleFxLoopedExist(handle) then
+                    StopParticleFxLooped(handle, false)
+                    RemoveParticleFx(handle, false)
+                end
+            end
+        end
+        activeFireZones[index] = nil
+    end
+end)
+
+--- Server syncs all active fire zones on join/reconnect
+RegisterNetEvent('trucking:client:syncFireZones', function(data)
+    if not data or not data.zones then return end
+    local playerCoords = GetEntityCoords(cache.ped)
+    for _, zoneData in ipairs(data.zones) do
+        if zoneData.coords then
+            local coords = vector3(zoneData.coords.x or zoneData.coords[1], zoneData.coords.y or zoneData.coords[2], zoneData.coords.z or zoneData.coords[3])
+            if #(playerCoords - coords) <= 300.0 then
+                local radius = zoneData.radius or 15.0
+                local remaining = zoneData.remainingMs or FIRE_ZONE_DURATION
+                CreateFireZone(coords, radius, remaining)
+            end
+        end
+    end
+end)
+
+--- Server alerts nearby players about a tanker fire
+RegisterNetEvent('trucking:client:tankerFireAlert', function(data)
+    if not data then return end
+    lib.notify({
+        title = 'Tanker Fire Alert',
+        description = 'A fuel tanker fire has been reported nearby. Avoid the area!',
+        type = 'error',
+        duration = 10000,
+    })
+    if data.coords then
+        local coords = data.coords
+        SetNewWaypoint(coords.x or coords[1], coords.y or coords[2])
+    end
+end)
+
 -- ═══════════════════════════════════════════════════════════════
 -- CLEANUP
 -- ═══════════════════════════════════════════════════════════════

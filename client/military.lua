@@ -353,12 +353,12 @@ local function StartFormationMonitor()
                         type        = 'error',
                         duration    = 8000,
                     })
-                    TriggerServerEvent('trucking:server:militaryEscortsDestroyed', convoyLoadId)
+                    TriggerServerEvent('trucking:server:escortDestroyed', convoyLoadId)
                 end
 
                 -- Check if unguarded window has expired
                 if GetElapsed(unguardedTimer) >= UNGUARDED_DURATION then
-                    TriggerServerEvent('trucking:server:militaryUnguardedExpired', convoyLoadId)
+                    TriggerServerEvent('trucking:server:militaryLongCon', convoyLoadId)
                 end
 
                 goto continueFormation
@@ -627,6 +627,22 @@ RegisterNetEvent('trucking:client:militaryContractFailed', function(reason)
         type        = 'error',
         duration    = 6000,
     })
+end)
+
+--- Server requests spawning the military convoy escort
+RegisterNetEvent('trucking:client:spawnMilitaryConvoy', function(data)
+    if not data or not data.loadId then return end
+    StartConvoy(data.loadId, data.route)
+end)
+
+--- Server requests despawning the military convoy
+RegisterNetEvent('trucking:client:despawnMilitaryConvoy', function()
+    StopConvoy()
+end)
+
+--- Server notifies escorts to investigate player position
+RegisterNetEvent('trucking:client:escortsInvestigate', function()
+    TaskEscortsInvestigate()
 end)
 
 -- ═══════════════════════════════════════════════════════════════

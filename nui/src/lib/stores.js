@@ -68,5 +68,37 @@ export const convoyData = writable({
   bonusPercentage: 0,
 });
 
+/** CDL written test data: { testType, questions, questionCount, passScore, fee } */
+export const cdlTestData = writable(null);
+
+/** HAZMAT briefing data: { topics } */
+export const hazmatBriefingData = writable(null);
+
+/** CDL test result: { passed, score, required, totalQuestions } */
+export const cdlTestResult = writable(null);
+
+/** Admin panel data */
+export const adminData = writable({
+  stats: null,
+  activeLoads: [],
+  activeSurges: [],
+  boardState: {},
+  economySettings: { multiplier: 1.0 },
+  pendingClaims: [],
+  playerProfile: null,
+});
+
+/** Payout breakdown data for completed loads */
+export const payoutData = writable(null);
+
+/** BOL detail overlay data */
+export const bolDetailData = writable(null);
+
+/** Dispatcher UI data */
+export const dispatcherData = writable(null);
+
+/** Tutorial HUD stage data */
+export const tutorialData = writable(null);
+
 /** NUI visibility state */
 export const visibility = writable(false);

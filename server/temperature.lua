@@ -3,7 +3,7 @@
 
     Handles reefer fault detection, engine-off tracking, and temperature
     excursion lifecycle management. All timing is server-authoritative
-    using os.time(). Client reports state changes (reefer fault/restore,
+    using GetServerTime(). Client reports state changes (reefer fault/restore,
     engine on/off) and server tracks durations for payout impact.
 
     Temperature states:
@@ -33,11 +33,11 @@
 -- ─────────────────────────────────────────────
 
 --- Tracks when a reefer fault started (from health drop or engine-off threshold)
---- [bol_id] = os.time() when fault was detected
+--- [bol_id] = GetServerTime() when fault was detected
 local reeferFaults = {}
 
 --- Tracks when the engine was turned off for temperature-monitored loads
---- [bol_id] = os.time() when engine turned off
+--- [bol_id] = GetServerTime() when engine turned off
 local engineOffTimers = {}
 
 -- ─────────────────────────────────────────────
@@ -62,14 +62,14 @@ function StartExcursion(bolId)
     -- Update active load record
     if ActiveLoads and ActiveLoads[bolId] then
         ActiveLoads[bolId].excursion_active = true
-        ActiveLoads[bolId].excursion_start = os.time()
+        ActiveLoads[bolId].excursion_start = GetServerTime()
 
         -- Persist to database
         MySQL.update.await([[
             UPDATE truck_active_loads
             SET excursion_active = TRUE, excursion_start = ?
             WHERE bol_id = ?
-        ]], { os.time(), bolId })
+        ]], { GetServerTime(), bolId })
     end
 
     -- Log BOL event
@@ -85,7 +85,7 @@ function StartExcursion(bolId)
         ]], {
             bolId, bolNumber, citizenid,
             json.encode({ source = reeferFaults[bolId] and 'reefer_fault' or 'engine_off' }),
-            os.time()
+            GetServerTime()
         })
     end
 
@@ -182,7 +182,7 @@ function EndExcursion(bolId, duration)
                 severity = severity,
                 compliance = compliance,
             }),
-            os.time()
+            GetServerTime()
         })
     end
 
@@ -209,7 +209,7 @@ function GetExcursionStatus(bolId)
     local isActive = reeferFaults[bolId] ~= nil
     local elapsed = 0
     if isActive and reeferFaults[bolId] then
-        elapsed = os.time() - reeferFaults[bolId]
+        elapsed = GetServerTime() - reeferFaults[bolId]
     end
 
     local totalMins = 0
@@ -254,7 +254,7 @@ RegisterNetEvent('trucking:server:reeferFault', function(bolId, clientHealth)
     -- Only register fault if not already faulted
     if reeferFaults[bolId] then return end
 
-    reeferFaults[bolId] = os.time()
+    reeferFaults[bolId] = GetServerTime()
     StartExcursion(bolId)
 
     -- Log reefer failure BOL event
@@ -267,7 +267,7 @@ RegisterNetEvent('trucking:server:reeferFault', function(bolId, clientHealth)
         ]], {
             bolId, activeLoad.bol_number or '', activeLoad.citizenid or '',
             json.encode({ client_health = clientHealth }),
-            os.time()
+            GetServerTime()
         })
 
         -- Update active load reefer status
@@ -291,7 +291,7 @@ RegisterNetEvent('trucking:server:reeferRestored', function(bolId, clientHealth)
 
     if not reeferFaults[bolId] then return end
 
-    local duration = os.time() - reeferFaults[bolId]
+    local duration = GetServerTime() - reeferFaults[bolId]
     reeferFaults[bolId] = nil
 
     -- Also clear engine-off timer if present (reefer is working again)
@@ -309,7 +309,7 @@ RegisterNetEvent('trucking:server:reeferRestored', function(bolId, clientHealth)
         ]], {
             bolId, activeLoad.bol_number or '', activeLoad.citizenid or '',
             json.encode({ client_health = clientHealth, duration_seconds = duration }),
-            os.time()
+            GetServerTime()
         })
 
         -- Update active load reefer status
@@ -338,7 +338,7 @@ RegisterNetEvent('trucking:server:engineOff', function(bolId)
         end
     end
 
-    engineOffTimers[bolId] = os.time()
+    engineOffTimers[bolId] = GetServerTime()
 
     print(('[trucking:temperature] Engine off detected for BOL %d'):format(bolId))
 end)
@@ -363,7 +363,7 @@ end)
 CreateThread(function()
     while true do
         Wait(30000)  -- 30 seconds
-        local now = os.time()
+        local now = GetServerTime()
 
         for bolId, offTime in pairs(engineOffTimers) do
             local elapsed = now - offTime
@@ -406,7 +406,7 @@ function CleanupTemperatureTracking(bolId)
 
     -- If there's an active excursion, end it now
     if reeferFaults[bolId] then
-        local duration = os.time() - reeferFaults[bolId]
+        local duration = GetServerTime() - reeferFaults[bolId]
         reeferFaults[bolId] = nil
         EndExcursion(bolId, duration)
     end

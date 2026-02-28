@@ -50,34 +50,6 @@ LeonConfig.Board = {
 -- controls the threshold (default: 1).
 
 -- ============================================================================
--- THE MILK RULE
--- Leon does not deal in dairy. Period. No milk, no cream, no cheese, no yogurt.
--- If a criminal load opportunity involves dairy products, Leon declines.
--- This check runs server-side when generating Leon's board.
--- ============================================================================
-Config.LeonDairyBlock = true
--- Cargo types blocked by the milk rule. Checked against cargo_type and cargo_subtype.
-LeonConfig.DairyBlockList = {
-    'liquid_bulk_food',     -- milk tankers
-    'dairy',                -- any future dairy subtype
-    'milk',                 -- any future milk subtype
-    'cheese',               -- any future cheese subtype
-}
-
---- Check if a cargo type is blocked by Leon's milk rule
----@param cargoType string
----@param cargoSubtype string|nil
----@return boolean blocked
-function IsLeonDairyBlocked(cargoType, cargoSubtype)
-    if not Config.LeonDairyBlock then return false end
-    for _, blocked in ipairs(LeonConfig.DairyBlockList) do
-        if cargoType == blocked then return true end
-        if cargoSubtype and cargoSubtype == blocked then return true end
-    end
-    return false
-end
-
--- ============================================================================
 -- CRIMINAL SUPPLIERS
 -- ============================================================================
 
@@ -335,7 +307,7 @@ LeonConfig.HeatLockoutClearAt   = 15
 --- Check if the current server time is within Leon's operating hours
 ---@return boolean
 function IsLeonAvailable()
-    local hour = tonumber(os.date('%H'))
+    local hour = tonumber(os.date('%H', GetServerTime()))
     if LeonConfig.Hours.start > LeonConfig.Hours.finish then
         -- Wraps midnight: e.g., 22:00 - 04:00
         return hour >= LeonConfig.Hours.start or hour < LeonConfig.Hours.finish

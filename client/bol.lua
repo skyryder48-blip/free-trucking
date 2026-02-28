@@ -165,9 +165,9 @@ RegisterNetEvent('trucking:client:openClaimInteraction', function()
     if not IsPlayerLoggedIn() then return end
 
     -- Get all trucking_bol items from player inventory
-    local bolItems = exports.ox_inventory:Search('slots', 'trucking_bol')
+    local ok, bolItems = pcall(exports.ox_inventory.Search, exports.ox_inventory, 'slots', 'trucking_bol')
 
-    if not bolItems or #bolItems == 0 then
+    if not ok or not bolItems or #bolItems == 0 then
         lib.notify({
             title = 'No BOLs Found',
             description = 'You need a physical BOL in your inventory to file a claim',
@@ -211,7 +211,7 @@ RegisterNetEvent('trucking:client:openClaimInteraction', function()
                 })
 
                 if confirm == 'confirm' then
-                    TriggerServerEvent('trucking:server:filingClaim', bolNum, slot.slot)
+                    TriggerServerEvent('trucking:server:fileInsuranceClaim', bolNum, slot.slot)
                 end
             end,
         })

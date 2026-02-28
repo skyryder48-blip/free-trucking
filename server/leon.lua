@@ -4,7 +4,6 @@
     and Leon-specific delivery completion logic.
 
     Leon board: 5 loads per refresh, refreshes every 3 hours, all expire at 04:00.
-    Leon does not deal in dairy — the milk rule.
     No BOL, no seal, no insurance, no GPS on Leon loads.
 ]]
 
@@ -91,35 +90,9 @@ local PayoutRanges = {
     critical    = { 10000, 20000 },
 }
 
---- Dairy/milk cargo keywords — Leon's milk rule
-local DAIRY_KEYWORDS = {
-    'dairy', 'milk', 'cheese', 'butter', 'cream', 'yogurt', 'yoghurt',
-    'ice_cream', 'whey', 'lactose', 'casein', 'curds',
-}
-
 --- Per-player supplier progression tracking (in-memory, synced from DB)
 ---@type table<string, table>
 local SupplierProgression = {}
-
---- Check if a cargo type or description contains dairy references
----@param cargoType string The cargo type identifier
----@param cargoDesc string|nil Optional cargo description
----@return boolean isDairy True if the cargo involves dairy
-local function IsDairyCargo(cargoType, cargoDesc)
-    if not cargoType then return false end
-
-    local lowerType = cargoType:lower()
-    local lowerDesc = cargoDesc and cargoDesc:lower() or ''
-
-    for i = 1, #DAIRY_KEYWORDS do
-        local keyword = DAIRY_KEYWORDS[i]
-        if lowerType:find(keyword, 1, true) or lowerDesc:find(keyword, 1, true) then
-            return true
-        end
-    end
-
-    return false
-end
 
 --- Generate a random integer within a range (inclusive)
 ---@param min number Minimum value
@@ -132,25 +105,26 @@ end
 --- Calculate the 04:00 server time expiry for Leon loads
 ---@return number timestamp Unix timestamp of next 04:00
 local function GetLeonExpiry()
-    local now = os.time()
+    local now = GetServerTime()
     local date = os.date('*t', now)
+
+    -- Calculate seconds elapsed since midnight
+    local secondsIntoDay = date.hour * 3600 + date.min * 60 + date.sec
+    local midnight = now - secondsIntoDay
 
     -- If current hour >= 4, expiry is tomorrow at 04:00
     -- If current hour < 4, expiry is today at 04:00
     if date.hour >= 4 then
-        date.day = date.day + 1
+        return midnight + 86400 + (4 * 3600)
+    else
+        return midnight + (4 * 3600)
     end
-    date.hour = 4
-    date.min = 0
-    date.sec = 0
-
-    return os.time(date)
 end
 
 --- Check if current server time is within Leon's operating hours (22:00-04:00)
 ---@return boolean active True if Leon is active
 local function IsLeonActiveHours()
-    local hour = tonumber(os.date('%H', os.time()))
+    local hour = tonumber(os.date('%H', GetServerTime()))
     return hour >= 22 or hour < 4
 end
 
@@ -299,7 +273,7 @@ end
 
 --- Generate a single Leon load entry
 ---@param supplier table Supplier definition
----@return table|nil load The generated load, or nil if rejected (milk rule)
+---@return table|nil load The generated load, or nil on generation failure
 local function GenerateSingleLeonLoad(supplier)
     local riskTier = supplier.risk_tier or 'low'
     local feeRange = supplier.fee_range or FeeRanges[riskTier] or FeeRanges.low
@@ -339,12 +313,7 @@ local function GenerateSingleLeonLoad(supplier)
     local descPool = cargoDescriptions[riskTier] or cargoDescriptions.low
     local cargoDesc = descPool[math.random(#descPool)]
 
-    -- Apply milk rule — reject dairy cargo
-    if IsDairyCargo(cargoDesc, nil) then
-        return nil
-    end
-
-    -- Generate random cargo type that is NOT dairy
+    -- Generate random cargo type
     local cargoTypes = {
         'contraband_general', 'contraband_electronics', 'contraband_weapons_parts',
         'contraband_chemicals', 'contraband_pharmaceuticals', 'contraband_luxury',
@@ -352,15 +321,10 @@ local function GenerateSingleLeonLoad(supplier)
     }
     local cargoType = cargoTypes[math.random(#cargoTypes)]
 
-    -- Final milk rule check on generated cargo type
-    if IsDairyCargo(cargoType, cargoDesc) then
-        return nil
-    end
-
     local expiry = GetLeonExpiry()
 
     -- Generate a unique load ID
-    local loadId = 'LEON-' .. os.time() .. '-' .. math.random(1000, 9999)
+    local loadId = 'LEON-' .. GetServerTime() .. '-' .. math.random(1000, 9999)
 
     return {
         load_id         = loadId,
@@ -374,7 +338,7 @@ local function GenerateSingleLeonLoad(supplier)
         region          = supplier.region or 'los_santos',
         rate_mult       = supplier.rate_mult or 1.0,
         expires_at      = expiry,
-        posted_at       = os.time(),
+        posted_at       = GetServerTime(),
         fee_paid        = false,
         accepted        = false,
         accepted_by     = nil,
@@ -467,7 +431,7 @@ function GenerateLeonBoard(citizenid)
 
     local board = {}
     local attempts = 0
-    local maxAttempts = LEON_BOARD_SIZE * 3 -- Account for milk rule rejections
+    local maxAttempts = LEON_BOARD_SIZE * 3
 
     while #board < LEON_BOARD_SIZE and attempts < maxAttempts do
         attempts = attempts + 1
@@ -482,7 +446,7 @@ function GenerateLeonBoard(citizenid)
     end
 
     LeonBoard = board
-    LastLeonRefresh = os.time()
+    LastLeonRefresh = GetServerTime()
 
     -- Persist to database
     for i = 1, #board do
@@ -540,7 +504,7 @@ function GetLeonBoard(citizenid)
     if not citizenid then return {} end
 
     -- Check if board needs refresh
-    local now = os.time()
+    local now = GetServerTime()
     if now - LastLeonRefresh >= LEON_REFRESH_INTERVAL or #LeonBoard == 0 then
         GenerateLeonBoard(citizenid)
     end
@@ -619,7 +583,7 @@ function PayLeonFee(src, loadId)
     if not load then return false, 'load_not_found' end
     if load.fee_paid then return false, 'fee_already_paid' end
     if load.accepted then return false, 'load_already_accepted' end
-    if load.expires_at <= os.time() then return false, 'load_expired' end
+    if load.expires_at <= GetServerTime() then return false, 'load_expired' end
 
     -- Check supplier is unlocked for this player
     if not load.is_external and not IsSupplierUnlocked(citizenid, load.supplier_id) then
@@ -703,7 +667,7 @@ function AcceptLeonLoad(src, loadId)
     if not load then return false, 'load_not_found' end
     if not load.fee_paid then return false, 'fee_not_paid' end
     if load.accepted then return false, 'load_already_accepted' end
-    if load.expires_at <= os.time() then return false, 'load_expired' end
+    if load.expires_at <= GetServerTime() then return false, 'load_expired' end
 
     -- Check player doesn't already have an active load
     local existingLoad = MySQL.single.await([[
@@ -736,8 +700,8 @@ function AcceptLeonLoad(src, loadId)
     ]], {
         loadId,
         citizenid,
-        os.time(),
-        os.time() + (load.window_minutes * 60),
+        GetServerTime(),
+        GetServerTime() + (load.window_minutes * 60),
         load.payout,
     })
 
@@ -757,8 +721,8 @@ function AcceptLeonLoad(src, loadId)
             cargo_desc      = load.cargo_desc,
             payout          = load.payout,
             risk_tier       = load.risk_tier,
-            window_expires  = os.time() + (load.window_minutes * 60),
-            accepted_at     = os.time(),
+            window_expires  = GetServerTime() + (load.window_minutes * 60),
+            accepted_at     = GetServerTime(),
             status          = 'at_origin',
         }
     end
@@ -836,7 +800,7 @@ function CompleteLeonDelivery(src, loadId)
             total_earnings = total_earnings + ?,
             last_seen = ?
         WHERE citizenid = ?
-    ]], { payout, os.time(), citizenid })
+    ]], { payout, GetServerTime(), citizenid })
 
     -- Update load status
     MySQL.update([[
@@ -901,12 +865,6 @@ function RegisterLeonLoadType(loadTypeData)
     local validTiers = { low = true, medium = true, high = true, critical = true }
     if not validTiers[loadTypeData.risk_tier] then
         print(('[Trucking Leon] Invalid risk tier: %s'):format(tostring(loadTypeData.risk_tier)))
-        return false
-    end
-
-    -- Apply milk rule check on label
-    if IsDairyCargo(loadTypeData.label, loadTypeData.supplier_id) then
-        print('[Trucking Leon] Rejected load type registration — milk rule violation')
         return false
     end
 
@@ -1040,7 +998,7 @@ CreateThread(function()
     while true do
         Wait(60000) -- Check every minute
 
-        local now = os.time()
+        local now = GetServerTime()
 
         -- Expire the board at 04:00
         local hour = tonumber(os.date('%H', now))

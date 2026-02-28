@@ -479,6 +479,113 @@ RegisterNetEvent('trucking:client:distressActive', function(data)
     })
 end)
 
+--- Server confirms departure (BOL signed, status now in_transit)
+RegisterNetEvent('trucking:client:departed', function(data)
+    if not ActiveLoad then return end
+    ActiveLoad.status = 'in_transit'
+    if data and data.departed_at then
+        ActiveLoad.departed_at = data.departed_at
+    end
+    lib.notify({
+        title = 'Departed',
+        description = 'Load is now in transit. Proceed to destination.',
+        type = 'success',
+    })
+end)
+
+--- Server confirms load was accepted from the board
+RegisterNetEvent('trucking:client:loadAccepted', function(data)
+    if not data then return end
+    lib.notify({
+        title = 'Load Accepted',
+        description = 'BOL #' .. (data.bolNumber or '?') .. ' confirmed.',
+        type = 'success',
+    })
+end)
+
+--- Server confirms load was abandoned
+RegisterNetEvent('trucking:client:loadAbandoned', function(data)
+    lib.notify({
+        title = 'Load Abandoned',
+        description = data and data.reason or 'Load has been abandoned.',
+        type = 'error',
+        duration = 6000,
+    })
+    CleanupState()
+end)
+
+--- Server confirms load was delivered
+RegisterNetEvent('trucking:client:loadDelivered', function(data)
+    if not data then return end
+    lib.notify({
+        title = 'Load Delivered',
+        description = 'BOL #' .. (data.bolNumber or '?') .. ' — Payout: $' .. (data.payout or 0),
+        type = 'success',
+        duration = 8000,
+    })
+end)
+
+--- Server confirms load was rejected at destination
+RegisterNetEvent('trucking:client:loadRejected', function(data)
+    lib.notify({
+        title = 'Load Rejected',
+        description = data and data.reason or 'Load was rejected by the receiver.',
+        type = 'error',
+        duration = 8000,
+    })
+end)
+
+--- Server confirms load was reserved from the board
+RegisterNetEvent('trucking:client:loadReserved', function(data)
+    if not data then return end
+    SendNUIMessage({
+        action = 'loadReserved',
+        data = data,
+    })
+    lib.notify({
+        title = 'Load Reserved',
+        description = 'BOL #' .. (data.bolNumber or '?') .. ' reserved for '
+            .. (data.reservationMinutes or 5) .. ' minutes.',
+        type = 'success',
+    })
+end)
+
+--- Server sends load detail response (board preview)
+RegisterNetEvent('trucking:client:loadDetailResponse', function(data)
+    if not data then return end
+    SendNUIMessage({
+        action = 'loadDetailResponse',
+        data = data,
+    })
+end)
+
+--- Server cancels a reservation (timeout or server-side cancel)
+RegisterNetEvent('trucking:client:reservationCancelled', function(data)
+    SendNUIMessage({
+        action = 'reservationCancelled',
+        data = data,
+    })
+    lib.notify({
+        title = 'Reservation Cancelled',
+        description = data and data.reason or 'Your reservation has expired.',
+        type = 'inform',
+    })
+end)
+
+--- Nearby driver distress alert (broadcast to other players)
+RegisterNetEvent('trucking:client:distressAlert', function(data)
+    if not data then return end
+    lib.notify({
+        title = 'Distress Signal',
+        description = 'A driver is in distress at ' .. (data.location or 'unknown location'),
+        type = 'error',
+        duration = 10000,
+    })
+    if data.coords then
+        SetNewWaypoint(data.coords.x or data.coords[1], data.coords.y or data.coords[2])
+    end
+end)
+
 -- ─────────────────────────────────────────────
 -- MONITORING START/STOP EVENTS
 -- ─────────────────────────────────────────────

@@ -68,7 +68,7 @@ function BuildEmbed(title, fields, color, description)
     local embed = {
         title       = title or 'Trucking System',
         color       = color or 0x0B1F45,
-        timestamp   = os.date('!%Y-%m-%dT%H:%M:%SZ'),
+        timestamp   = os.date('!%Y-%m-%dT%H:%M:%SZ', GetServerTime()),
         fields      = {},
         footer      = {
             text = 'Bears Trucking System',
@@ -115,8 +115,8 @@ local function LogWebhookToDatabase(channel, eventType, citizenid, bolNumber, pa
         json.encode(payload),
         delivered,
         attempts,
-        delivered and os.time() or nil,
-        os.time(),
+        delivered and GetServerTime() or nil,
+        GetServerTime(),
     })
 end
 

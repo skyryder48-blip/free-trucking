@@ -72,7 +72,7 @@ function CreateConvoy(src, convoyType)
         companyId = company.company_id
     end
 
-    local now = os.time()
+    local now = GetServerTime()
 
     -- Create convoy record in database
     local convoyId = MySQL.insert.await([[
@@ -298,7 +298,7 @@ function StartConvoy(convoyId)
         return false, 'need_minimum_two_members'
     end
 
-    local now = os.time()
+    local now = GetServerTime()
 
     MySQL.update.await(
         'UPDATE truck_convoys SET status = ?, started_at = ? WHERE id = ?',
@@ -424,7 +424,7 @@ end
 function CompleteConvoy(convoyId)
     if not convoyId then return false end
 
-    local now = os.time()
+    local now = GetServerTime()
 
     MySQL.update.await(
         'UPDATE truck_convoys SET status = ?, completed_at = ? WHERE id = ?',
@@ -506,7 +506,7 @@ function RecordConvoyDelivery(convoyId, citizenid)
     if not convoyId or not citizenid then return end
     if not ConvoyMembers[convoyId] or not ConvoyMembers[convoyId][citizenid] then return end
 
-    ConvoyMembers[convoyId][citizenid].deliveredAt = os.time()
+    ConvoyMembers[convoyId][citizenid].deliveredAt = GetServerTime()
 
     -- Check if all members have now delivered
     local totalMembers = 0
@@ -661,6 +661,34 @@ AddEventHandler('playerDropped', function()
             break  -- player can only be in one convoy
         end
     end
+end)
+
+--- Send convoy invite to another player
+RegisterNetEvent('trucking:server:inviteToConvoy', function(convoyId, targetCitizenId)
+    local src = source
+    local player = exports.qbx_core:GetPlayer(src)
+    if not player then return end
+    if not RateLimitEvent(src, 'convoyInvite', 5000) then return end
+
+    local convoy = Convoys[convoyId]
+    if not convoy then return end
+
+    -- Verify sender is in the convoy
+    local citizenid = player.PlayerData.citizenid
+    if not ConvoyMembers[convoyId] or not ConvoyMembers[convoyId][citizenid] then return end
+
+    -- Find target player
+    local targetSrc = GetPlayerByIdentifier(targetCitizenId)
+    if not targetSrc then
+        lib.notify(src, { title = 'Convoy', description = 'Player not online.', type = 'error' })
+        return
+    end
+
+    TriggerClientEvent('trucking:client:convoyInvite', targetSrc, {
+        convoyId = convoyId,
+        invitedBy = citizenid,
+        convoyType = convoy.convoy_type,
+    })
 end)
 
 print('[trucking:convoy] Convoy system initialized')

@@ -186,6 +186,29 @@ RegisterNetEvent('trucking:client:boardRefresh', function(data)
     })
 end)
 
+--- Server sends board data after opening board (from terminal or shipper)
+RegisterNetEvent('trucking:client:showBoard', function(data)
+    if not data then return end
+    SendNUIMessage({
+        action = 'showBoard',
+        data = data,
+    })
+    if Config.UseStandaloneNUI and not IsTruckingNUIOpen() then
+        OpenTruckingNUI()
+    end
+end)
+
+--- Delivery window has expired
+RegisterNetEvent('trucking:client:windowExpired', function(data)
+    if not ActiveLoad then return end
+    lib.notify({
+        title = 'Delivery Window Expired',
+        description = 'BOL #' .. (ActiveBOL and ActiveBOL.bol_number or '?') .. ' — Time is up!',
+        type = 'error',
+        duration = 10000,
+    })
+end)
+
 --- Transfer offer received from another driver
 RegisterNetEvent('trucking:client:transferOffer', function(data)
     if not data then return end
@@ -218,7 +241,7 @@ RegisterNetEvent('trucking:client:directOffer', function(data)
     })
 
     if accept == 'confirm' then
-        TriggerServerEvent('trucking:server:acceptDirectOffer', data.loadId)
+        TriggerServerEvent('trucking:server:acceptLoad', data.loadId)
     end
 end)
 
@@ -440,13 +463,13 @@ end)
 
 --- Request profile data
 RegisterNUICallback('trucking:requestProfile', function(_, cb)
-    TriggerServerEvent('trucking:server:requestProfile')
+    TriggerServerEvent('trucking:server:getCredentials')
     cb({ ok = true })
 end)
 
 --- Request insurance data
 RegisterNUICallback('trucking:requestInsurance', function(_, cb)
-    TriggerServerEvent('trucking:server:requestInsurance')
+    TriggerServerEvent('trucking:server:getInsuranceStatus')
     cb({ ok = true })
 end)
 
@@ -456,13 +479,13 @@ RegisterNUICallback('trucking:purchaseInsurance', function(data, cb)
         cb({ ok = false, error = 'No policy type specified' })
         return
     end
-    TriggerServerEvent('trucking:server:insurancePurchase', data.policyType, data.tierCoverage)
+    TriggerServerEvent('trucking:server:purchaseInsurance', data.policyType, data.tierCoverage)
     cb({ ok = true })
 end)
 
 --- Request company data
 RegisterNUICallback('trucking:requestCompany', function(_, cb)
-    TriggerServerEvent('trucking:server:requestCompany')
+    TriggerServerEvent('trucking:server:getCompanyMembers')
     cb({ ok = true })
 end)
 
@@ -481,7 +504,7 @@ RegisterNUICallback('trucking:requestLoadDetail', function(data, cb)
         cb({ ok = false, error = 'No load specified' })
         return
     end
-    TriggerServerEvent('trucking:server:requestLoadDetail', data.loadId)
+    TriggerServerEvent('trucking:server:getLoadDetail', data.loadId)
     cb({ ok = true })
 end)
 

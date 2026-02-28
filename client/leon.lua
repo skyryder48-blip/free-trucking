@@ -149,24 +149,6 @@ end
 -- LEON BOARD — OX_LIB CONTEXT MENUS
 -- ═══════════════════════════════════════════════════════════════
 
---- Show Leon's dismissive dialogue when player has dairy cargo.
-local function ShowMilkDismissal()
-    lib.registerContext({
-        id      = 'leon_milk_dismiss',
-        title   = 'Leon',
-        options = {
-            {
-                title       = '"I don\'t touch dairy. Get out."',
-                description = 'Leon won\'t deal in milk products.',
-                icon        = 'cow',
-                iconColor   = 'red',
-                readOnly    = true,
-            },
-        },
-    })
-    lib.showContext('leon_milk_dismiss')
-end
-
 --- Show a specific load's fee confirmation dialog.
 ---@param loadData table Load data from server
 local function ShowFeeConfirmation(loadData)
@@ -257,7 +239,7 @@ local function ShowLeonApproach()
                 iconColor   = 'orange',
                 onSelect    = function()
                     -- Request board data from server
-                    TriggerServerEvent('trucking:server:requestLeonBoard')
+                    TriggerServerEvent('trucking:server:openLeonBoard')
                 end,
             },
         },
@@ -356,15 +338,6 @@ local function CreateLeonZone()
             if not leonSpawned then return end
 
             if IsControlJustPressed(0, 51) then -- E key
-                -- Check for dairy cargo in inventory (milk rule)
-                if Config.LeonMilkRule then
-                    local hasDairy = lib.callback.await('trucking:server:checkPlayerDairy', false)
-                    if hasDairy then
-                        ShowMilkDismissal()
-                        return
-                    end
-                end
-
                 ShowLeonApproach()
             end
         end,
@@ -478,6 +451,32 @@ RegisterNetEvent('trucking:client:leonLoadRevealed', function(data)
 
     activeLeonLoad = data
     ShowLeonLoadDetails(data)
+end)
+
+--- Server sends Leon board display (alternative event name)
+RegisterNetEvent('trucking:client:showLeonBoard', function(loads)
+    leonBoardData = loads
+    ShowLeonBoard(loads)
+end)
+
+--- Server assigns a Leon load directly (server-initiated)
+RegisterNetEvent('trucking:client:leonLoadAssigned', function(data)
+    if not data then return end
+    activeLeonLoad = data
+    if data.origin_coords then
+        local coords = data.origin_coords
+        if type(coords) == 'table' then
+            SetNewWaypoint(coords.x or coords[1], coords.y or coords[2])
+        elseif type(coords) == 'vector3' then
+            SetNewWaypoint(coords.x, coords.y)
+        end
+    end
+    lib.notify({
+        title       = 'Leon',
+        description = '"Got something for you. Pick it up."',
+        type        = 'inform',
+        duration    = 8000,
+    })
 end)
 
 --- Leon load accepted — set GPS to pickup (no delivery GPS).

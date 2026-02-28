@@ -23,7 +23,7 @@ DB = {}
 ---@param playerName string
 ---@return number insertId
 function DB.CreateDriver(citizenid, playerName)
-    local now = os.time()
+    local now = GetServerTime()
     return MySQL.insert.await([[
         INSERT INTO truck_drivers (citizenid, player_name, first_seen, last_seen)
         VALUES (?, ?, ?, ?)
@@ -94,7 +94,7 @@ end
 ---@param data table  { driver_id, citizenid, license_type, fee_paid, ... }
 ---@return number insertId
 function DB.CreateLicense(data)
-    local now = os.time()
+    local now = GetServerTime()
     return MySQL.insert.await([[
         INSERT INTO truck_licenses
             (driver_id, citizenid, license_type, fee_paid, issued_at, expires_at)
@@ -151,7 +151,7 @@ end
 ---@param data table  { driver_id, citizenid, cert_type, background_fee_paid, expires_at }
 ---@return number insertId
 function DB.CreateCert(data)
-    local now = os.time()
+    local now = GetServerTime()
     return MySQL.insert.await([[
         INSERT INTO truck_certifications
             (driver_id, citizenid, cert_type, background_fee_paid, issued_at, expires_at)
@@ -194,7 +194,7 @@ end
 ---@param revokedReason string|nil
 ---@return number affectedRows
 function DB.UpdateCertStatus(certId, status, revokedReason)
-    local now = os.time()
+    local now = GetServerTime()
     return MySQL.update.await([[
         UPDATE truck_certifications
         SET status = ?,
@@ -286,7 +286,7 @@ function DB.GetAvailableLoads(region)
           AND board_status = 'available'
           AND expires_at > ?
         ORDER BY tier ASC, posted_at DESC
-    ]], { region, os.time() })
+    ]], { region, GetServerTime() })
 end
 
 --- Reserve a load for a player (3-minute hold)
@@ -430,7 +430,7 @@ function DB.InsertBOL(data)
         data.license_matched ~= false, -- default true
         data.seal_number, data.seal_status or 'not_applied',
         data.temp_required_min, data.temp_required_max,
-        data.bol_status or 'active', data.is_leon or false, data.issued_at or os.time(),
+        data.bol_status or 'active', data.is_leon or false, data.issued_at or GetServerTime(),
     })
 end
 
@@ -508,7 +508,7 @@ function DB.InsertBOLEvent(data)
         data.event_type,
         data.event_data and json.encode(data.event_data) or nil,
         data.coords and json.encode(data.coords) or nil,
-        data.occurred_at or os.time(),
+        data.occurred_at or GetServerTime(),
     })
 end
 
@@ -531,7 +531,7 @@ function DB.InsertDeposit(data)
         data.amount,
         data.tier,
         data.deposit_type or 'percentage',
-        os.time(),
+        GetServerTime(),
     })
 end
 
@@ -552,7 +552,7 @@ end
 function DB.UpdateDepositStatus(depositId, status)
     return MySQL.update.await(
         'UPDATE truck_deposits SET status = ?, resolved_at = ? WHERE id = ?',
-        { status, os.time(), depositId }
+        { status, GetServerTime(), depositId }
     )
 end
 
@@ -576,7 +576,7 @@ function DB.InsertRepLog(data)
         data.points_before, data.points_change, data.points_after,
         data.tier_before, data.tier_after,
         data.bol_id, data.bol_number, data.tier_of_load,
-        data.occurred_at or os.time(),
+        data.occurred_at or GetServerTime(),
     })
 end
 
@@ -624,7 +624,7 @@ function DB.UpsertShipperRep(data)
         data.driver_id, data.citizenid, data.shipper_id,
         data.points, data.tier,
         data.deliveries_completed, data.current_clean_streak,
-        data.last_delivery_at or os.time(),
+        data.last_delivery_at or GetServerTime(),
     })
 end
 
@@ -642,7 +642,7 @@ function DB.InsertShipperRepLog(data)
         data.driver_id, data.citizenid, data.shipper_id, data.change_type,
         data.points_before, data.points_change, data.points_after,
         data.tier_before, data.tier_after,
-        data.bol_id, data.occurred_at or os.time(),
+        data.bol_id, data.occurred_at or GetServerTime(),
     })
 end
 
@@ -677,7 +677,7 @@ function DB.UpdateBoardState(region, fields)
     local existing = DB.GetBoardState(region)
     if not existing then
         fields.region = region
-        fields.updated_at = os.time()
+        fields.updated_at = GetServerTime()
         local cols = {}
         local placeholders = {}
         local insertParams = {}
@@ -694,7 +694,7 @@ function DB.UpdateBoardState(region, fields)
 
     setClauses[#setClauses + 1] = 'updated_at = ?'
     params[#params] = nil -- remove the trailing region we added
-    params[#params + 1] = os.time()
+    params[#params + 1] = GetServerTime()
     params[#params + 1] = region
     return MySQL.update.await(
         'UPDATE truck_board_state SET ' .. table.concat(setClauses, ', ') .. ' WHERE region = ?',
@@ -722,7 +722,7 @@ function DB.InsertSurge(data)
         data.shipper_filter,
         data.surge_percentage,
         data.trigger_data and json.encode(data.trigger_data) or nil,
-        data.started_at or os.time(),
+        data.started_at or GetServerTime(),
         data.expires_at,
     })
 end
@@ -752,7 +752,7 @@ function DB.ExpireSurges()
         UPDATE truck_surge_events
         SET status = 'expired', ended_at = ?
         WHERE status = 'active' AND expires_at < ?
-    ]], { os.time(), os.time() })
+    ]], { GetServerTime(), GetServerTime() })
 end
 
 -- ============================================================================
@@ -776,7 +776,7 @@ function DB.InsertRoute(data)
         data.stop_count, json.encode(data.stops), data.total_distance_miles,
         data.required_license, data.base_payout_rental, data.base_payout_owner_op,
         data.multi_stop_premium_pct, data.deposit_amount, data.window_minutes,
-        data.posted_at or os.time(), data.expires_at,
+        data.posted_at or GetServerTime(), data.expires_at,
     })
 end
 
@@ -788,7 +788,7 @@ function DB.GetAvailableRoutes(region)
         SELECT * FROM truck_routes
         WHERE region = ? AND route_status = 'available' AND expires_at > ?
         ORDER BY tier ASC
-    ]], { region, os.time() })
+    ]], { region, GetServerTime() })
 end
 
 -- ============================================================================
@@ -811,7 +811,7 @@ function DB.InsertContract(data)
         data.destination_label, json.encode(data.destination_coords),
         data.window_hours, data.base_payout,
         data.partial_allowed ~= false,
-        data.posted_at or os.time(), data.expires_at,
+        data.posted_at or GetServerTime(), data.expires_at,
         data.is_leon or false,
     })
 end
@@ -824,7 +824,7 @@ function DB.GetAvailableContracts(region)
         SELECT * FROM truck_supplier_contracts
         WHERE region = ? AND contract_status = 'available' AND expires_at > ?
         ORDER BY posted_at DESC
-    ]], { region, os.time() })
+    ]], { region, GetServerTime() })
 end
 
 -- ============================================================================
@@ -838,7 +838,7 @@ function DB.GetOpenContracts()
         SELECT * FROM truck_open_contracts
         WHERE contract_status = 'active' AND expires_at > ?
         ORDER BY posted_at DESC
-    ]], { os.time() })
+    ]], { GetServerTime() })
 end
 
 --- Update a contribution to an open contract
@@ -863,7 +863,7 @@ function DB.UpdateContribution(contractId, citizenid, companyId, quantityAdded)
         ON DUPLICATE KEY UPDATE
             quantity_contributed = quantity_contributed + VALUES(quantity_contributed),
             last_contribution_at = VALUES(last_contribution_at)
-    ]], { contractId, citizenid, companyId, quantityAdded, os.time() })
+    ]], { contractId, citizenid, companyId, quantityAdded, GetServerTime() })
 
     -- Update the contract total
     MySQL.update.await([[
@@ -893,7 +893,7 @@ function DB.ExpireReservations()
         UPDATE truck_loads
         SET board_status = 'available', reserved_by = NULL, reserved_until = NULL
         WHERE board_status = 'reserved' AND reserved_until < ?
-    ]], { os.time() })
+    ]], { GetServerTime() })
 end
 
 --- Expire board loads past their expiry time
@@ -902,7 +902,7 @@ function DB.ExpireBoardLoads()
     return MySQL.update.await([[
         UPDATE truck_loads SET board_status = 'expired'
         WHERE board_status = 'available' AND expires_at < ?
-    ]], { os.time() })
+    ]], { GetServerTime() })
 end
 
 --- Expire insurance policies past their valid_until
@@ -911,7 +911,7 @@ function DB.ExpireInsurancePolicies()
     return MySQL.update.await([[
         UPDATE truck_insurance_policies SET status = 'expired'
         WHERE status = 'active' AND valid_until IS NOT NULL AND valid_until < ?
-    ]], { os.time() })
+    ]], { GetServerTime() })
 end
 
 --- Lift driver suspensions that have expired
@@ -921,13 +921,13 @@ function DB.LiftExpiredSuspensions()
         UPDATE truck_drivers
         SET reputation_tier = 'restricted', reputation_score = 1, suspended_until = NULL
         WHERE reputation_tier = 'suspended' AND suspended_until IS NOT NULL AND suspended_until < ?
-    ]], { os.time() })
+    ]], { GetServerTime() })
 end
 
 --- Decay preferred shipper tier for inactive drivers (14 days)
 ---@return number affectedRows
 function DB.DecayPreferredTier()
-    local cutoff = os.time() - 1209600 -- 14 days in seconds
+    local cutoff = GetServerTime() - 1209600 -- 14 days in seconds
     -- First, warn drivers approaching decay (already warned = ready to decay)
     MySQL.update.await([[
         UPDATE truck_shipper_reputation
@@ -953,5 +953,5 @@ function DB.GetPendingClaimPayouts()
     return MySQL.query.await([[
         SELECT ic.* FROM truck_insurance_claims ic
         WHERE ic.status = 'approved' AND ic.payout_at <= ?
-    ]], { os.time() })
+    ]], { GetServerTime() })
 end

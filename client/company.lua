@@ -173,7 +173,7 @@ RegisterNetEvent('trucking:client:enableDispatchMode', function()
         duration = 6000,
     })
 
-    TriggerServerEvent('trucking:server:dispatchModeChanged', true)
+    TriggerServerEvent('trucking:server:enableDispatchMode')
 end)
 
 --- Disable dispatcher mode.
@@ -190,7 +190,7 @@ RegisterNetEvent('trucking:client:disableDispatchMode', function()
         type = 'inform',
     })
 
-    TriggerServerEvent('trucking:server:dispatchModeChanged', false)
+    TriggerServerEvent('trucking:server:disableDispatchMode')
 end)
 
 --- Toggle dispatch mode.
@@ -369,7 +369,7 @@ RegisterNetEvent('trucking:client:directOffer', function(data)
     })
 
     if result == 'confirm' then
-        TriggerServerEvent('trucking:server:acceptDirectOffer', data.loadId)
+        TriggerServerEvent('trucking:server:acceptLoad', data.loadId)
     else
         TriggerServerEvent('trucking:server:declineDirectOffer', data.loadId)
     end
@@ -401,7 +401,7 @@ RegisterNUICallback('trucking:dispatchRefresh', function(_, cb)
         return
     end
 
-    TriggerServerEvent('trucking:server:requestCompanyStatus')
+    TriggerServerEvent('trucking:server:getCompanyActiveLoads')
     cb({ ok = true })
 end)
 
@@ -499,6 +499,136 @@ function ShowCompanyMembers()
     })
     lib.showContext('company_member_list')
 end
+
+-- ─────────────────────────────────────────────
+-- SERVER RESPONSE EVENTS
+-- ─────────────────────────────────────────────
+
+--- Dispatcher assignment was declined by the target driver
+RegisterNetEvent('trucking:client:assignmentDeclined', function(data)
+    if not data then return end
+    lib.notify({
+        title = 'Assignment Declined',
+        description = (data.driverName or 'Driver') .. ' declined the assignment.',
+        type = 'inform',
+    })
+end)
+
+--- Company active loads data (dispatcher response)
+RegisterNetEvent('trucking:client:companyActiveLoads', function(data)
+    if not data then return end
+    SendNUIMessage({
+        action = 'companyActiveLoads',
+        data = data,
+    })
+end)
+
+--- Company membership invitation
+RegisterNetEvent('trucking:client:companyInvite', function(data)
+    if not data then return end
+    local result = lib.alertDialog({
+        header = 'Company Invitation',
+        content = '**' .. (data.companyName or 'A company') .. '** has invited you to join as **'
+            .. (data.role or 'driver') .. '**.',
+        centered = true,
+        cancel = true,
+        labels = {
+            confirm = 'Accept',
+            cancel = 'Decline',
+        },
+    })
+    if result == 'confirm' then
+        TriggerServerEvent('trucking:server:acceptCompanyInvite', data.companyId)
+    else
+        TriggerServerEvent('trucking:server:declineCompanyInvite', data.companyId)
+    end
+end)
+
+--- Company member list response
+RegisterNetEvent('trucking:client:companyMembers', function(data)
+    if not data then return end
+    CompanyMembers = data.members or CompanyMembers
+    DriverStatuses = data.statuses or DriverStatuses
+    SendNUIMessage({
+        action = 'companyMembers',
+        data = data,
+    })
+end)
+
+--- Company creation result
+RegisterNetEvent('trucking:client:createCompanyResult', function(data)
+    if not data then return end
+    if data.success then
+        CompanyId = data.companyId
+        CompanyData = data.company
+        CompanyRole = 'owner'
+        lib.notify({
+            title = 'Company Created',
+            description = (data.companyName or 'Your company') .. ' has been registered.',
+            type = 'success',
+        })
+    else
+        lib.notify({
+            title = 'Company Creation Failed',
+            description = data.reason or 'Unable to create company.',
+            type = 'error',
+        })
+    end
+end)
+
+--- Dispatch mode disabled by server (e.g., player left company)
+RegisterNetEvent('trucking:client:dispatchModeDisabled', function()
+    DispatchModeActive = false
+    SendNUIMessage({ action = 'closeDispatcherUI' })
+    lib.notify({
+        title = 'Dispatch Mode',
+        description = 'Dispatch mode has been deactivated.',
+        type = 'inform',
+    })
+end)
+
+--- Individual driver status update from server
+RegisterNetEvent('trucking:client:driverStatus', function(data)
+    if not data or not data.citizenid then return end
+    DriverStatuses[data.citizenid] = {
+        status = data.status,
+        cargoType = data.cargoType,
+        destination = data.destination,
+        coords = data.coords,
+        speed = data.speed,
+    }
+    SendNUIMessage({
+        action = 'driverStatus',
+        data = data,
+    })
+end)
+
+--- Player removed from company
+RegisterNetEvent('trucking:client:removedFromCompany', function(data)
+    CompanyData = nil
+    CompanyRole = nil
+    CompanyId = nil
+    CompanyMembers = {}
+    DriverStatuses = {}
+    DispatchModeActive = false
+    SendNUIMessage({ action = 'closeDispatcherUI' })
+    lib.notify({
+        title = 'Removed from Company',
+        description = data and data.reason or 'You have been removed from the company.',
+        type = 'error',
+        duration = 8000,
+    })
+end)
+
+--- Transfer was declined by the other driver
+RegisterNetEvent('trucking:client:transferDeclined', function(data)
+    if not data then return end
+    lib.notify({
+        title = 'Transfer Declined',
+        description = (data.driverName or 'Driver') .. ' declined the load transfer.',
+        type = 'inform',
+    })
+end)
 
 -- ─────────────────────────────────────────────
 -- CLEANUP

@@ -93,6 +93,12 @@ Config.OversizedZoneOverride = vec3(8.0, 5.0, 3.0)  -- oversized loads (T2-05) u
 -- T1+ loads hard-block acceptance without an active policy.
 Config.InsuranceExemptTiers     = { [0] = true }   -- tiers that do not require insurance
 Config.ClaimPayoutMultiplier    = 2                -- deposit x 2 + premium allocated
+
+-- Insurance terminal locations (standalone offices, separate from truck stop terminals)
+Config.InsuranceLocations = {
+    { label = 'Vapid Commercial Insurance — LS',   coords = vector3(-157.0, -302.0, 40.0) },
+    { label = 'Vapid Commercial Insurance — Sandy', coords = vector3(1862.0, 3690.0, 34.27) },
+}
 Config.ClaimDelaySeconds        = 900              -- 15-minute payout delay after approval
 Config.ClaimCheckIntervalMs     = 60000            -- check pending claims every 60 seconds
 
@@ -163,7 +169,7 @@ Config.LeonActiveHoursEnd       = 4        -- 04:00 server time
 Config.LeonBoardSize            = 5        -- loads per refresh
 Config.LeonRefreshSeconds       = 10800    -- 3 hours between refreshes
 Config.LeonDawnExpiry            = 4        -- hour at which all Leon loads expire (04:00)
-Config.LeonMilkRule             = true     -- Leon does not deal in dairy
+
 
 -- Leon supplier unlock requirements
 Config.LeonSuppliers = {
@@ -373,3 +379,97 @@ Config.SurgeTriggers = {
 -- ─────────────────────────────────────────────
 Config.AdminPermission          = 'admin'  -- QBX permission level for admin commands
 Config.AdminLiveEconomyTuning   = true     -- allow live ServerMultiplier adjustment
+
+-- ─────────────────────────────────────────────
+-- TRUCK STOP NETWORK (Section 31)
+-- ─────────────────────────────────────────────
+-- 6 locations: 4 full-service, 2 basic.
+-- Full-service: board terminal, repair bay, insurance terminal.
+-- Basic: board terminal only (some with livestock rest).
+-- All full-service stops are robbery safe zones.
+
+Config.TruckStops = {
+    -- ── Full Service ─────────────────────────────
+    {
+        label            = 'Route 68 Truck Plaza',
+        region           = 'sandy_shores',
+        coords           = vector3(1196.50, 2648.20, 37.82),
+        hasTerminal      = true,
+        terminalCoords   = vector3(1199.23, 2648.30, 37.78),
+        terminalHeading  = 315,
+        hasRepairBay     = true,
+        repairCoords     = vector3(1185.40, 2640.50, 37.80),
+        hasInsurance     = true,
+        insuranceCoords  = vector3(1202.10, 2655.80, 37.82),
+        safezone         = true,
+        safezoneRadius   = 200,
+    },
+    {
+        label            = 'Paleto Highway Stop',
+        region           = 'paleto',
+        coords           = vector3(110.20, 6620.40, 31.85),
+        hasTerminal      = true,
+        terminalCoords   = vector3(112.50, 6623.10, 31.85),
+        terminalHeading  = 45,
+        hasRepairBay     = true,
+        repairCoords     = vector3(105.30, 6612.80, 31.85),
+        hasInsurance     = true,
+        insuranceCoords  = vector3(118.70, 6628.50, 31.85),
+        safezone         = true,
+        safezoneRadius   = 200,
+    },
+    {
+        label            = 'LSIA Commercial Yard',
+        region           = 'los_santos',
+        coords           = vector3(-1032.50, -2729.80, 13.76),
+        hasTerminal      = true,
+        terminalCoords   = vector3(-1029.20, -2733.40, 13.76),
+        terminalHeading  = 150,
+        hasRepairBay     = true,
+        repairCoords     = vector3(-1040.60, -2722.30, 13.76),
+        hasInsurance     = true,
+        insuranceCoords  = vector3(-1025.80, -2740.10, 13.76),
+        safezone         = true,
+        safezoneRadius   = 200,
+    },
+    {
+        label            = 'Port of LS Staging',
+        region           = 'los_santos',
+        coords           = vector3(168.50, -3090.20, 5.90),
+        hasTerminal      = true,
+        terminalCoords   = vector3(172.30, -3087.50, 5.90),
+        terminalHeading  = 270,
+        hasRepairBay     = true,
+        repairCoords     = vector3(160.40, -3095.60, 5.90),
+        hasInsurance     = true,
+        insuranceCoords  = vector3(178.90, -3082.30, 5.90),
+        safezone         = true,
+        safezoneRadius   = 200,
+    },
+
+    -- ── Basic Service ────────────────────────────
+    {
+        label            = 'Harmony Rest Area',
+        region           = 'sandy_shores',
+        coords           = vector3(1222.10, 2730.50, 38.00),
+        hasTerminal      = true,
+        terminalCoords   = vector3(1224.80, 2732.30, 38.00),
+        terminalHeading  = 0,
+        hasRepairBay     = false,
+        hasInsurance     = false,
+        hasLivestockRest = true,
+        livestockRestCoords = vector3(1230.50, 2740.10, 38.00),
+    },
+    {
+        label            = 'Grapeseed Co-op Fuel',
+        region           = 'grapeseed',
+        coords           = vector3(1700.20, 4920.60, 42.06),
+        hasTerminal      = true,
+        terminalCoords   = vector3(1703.50, 4923.40, 42.06),
+        terminalHeading  = 90,
+        hasRepairBay     = false,
+        hasInsurance     = false,
+        hasLivestockRest = true,
+        livestockRestCoords = vector3(1710.80, 4930.20, 42.06),
+    },
+}

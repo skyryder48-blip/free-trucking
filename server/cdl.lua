@@ -149,7 +149,7 @@ function StartWrittenTest(src, testType)
     if not driver then
         -- Create driver record on first test attempt
         local playerName = player.PlayerData.charinfo.firstname .. ' ' .. player.PlayerData.charinfo.lastname
-        local now = os.time()
+        local now = GetServerTime()
         local driverId = MySQL.insert.await([[
             INSERT INTO truck_drivers (citizenid, player_name, reputation_score, reputation_tier, first_seen, last_seen)
             VALUES (?, ?, 500, 'developing', ?, ?)
@@ -172,8 +172,8 @@ function StartWrittenTest(src, testType)
         { driver.id, testType }
     )
     if licenseRecord and licenseRecord.locked_until then
-        if os.time() < licenseRecord.locked_until then
-            local remaining = licenseRecord.locked_until - os.time()
+        if GetServerTime() < licenseRecord.locked_until then
+            local remaining = licenseRecord.locked_until - GetServerTime()
             return false, ('locked_out:%d'):format(remaining)
         else
             -- Lockout expired — reset attempts
@@ -244,7 +244,7 @@ function StartWrittenTest(src, testType)
         questions = pool,
         selectedIndices = {},
         answerKey = answerKey,
-        startedAt = os.time(),
+        startedAt = GetServerTime(),
         fee = config.fee,
     }
     for i = 1, count do
@@ -256,7 +256,7 @@ function StartWrittenTest(src, testType)
         MySQL.insert.await([[
             INSERT INTO truck_licenses (driver_id, citizenid, license_type, status, written_test_attempts, fee_paid, issued_at)
             VALUES (?, ?, ?, 'suspended', 1, ?, ?)
-        ]], { driver.id, citizenid, testType, config.fee, os.time() })
+        ]], { driver.id, citizenid, testType, config.fee, GetServerTime() })
     else
         MySQL.update.await(
             'UPDATE truck_licenses SET written_test_attempts = written_test_attempts + 1 WHERE driver_id = ? AND license_type = ?',
@@ -340,7 +340,7 @@ function SubmitTestResults(src, testType, answers)
         )
 
         if licenseRecord and licenseRecord.written_test_attempts >= config.maxAttempts then
-            local lockUntil = os.time() + config.lockoutSeconds
+            local lockUntil = GetServerTime() + config.lockoutSeconds
             MySQL.update.await(
                 'UPDATE truck_licenses SET locked_until = ? WHERE driver_id = ? AND license_type = ?',
                 { lockUntil, session.driverId, testType }
@@ -375,6 +375,77 @@ function SubmitTestResults(src, testType, answers)
 end
 
 -- ─────────────────────────────────────────────
+-- CDL ITEM MANAGEMENT
+-- ─────────────────────────────────────────────
+
+--- Mapping of license and endorsement types to CDL metadata categories
+local CDL_LICENSE_TYPES = {
+    class_b = 'license_class',
+    class_a = 'license_class',
+}
+
+local CDL_ENDORSEMENT_TYPES = {
+    tanker = true,
+    hazmat = true,
+}
+
+local CDL_PERMIT_TYPES = {
+    oversized_monthly = true,
+}
+
+--- Update or create the single CDL inventory item with new credential metadata.
+--- If the player has no CDL item, one is created. If they already have one,
+--- its metadata is updated in place to include the new credential.
+---@param src number Player server ID
+---@param citizenid string Player's citizen ID
+---@param category string 'license', 'endorsement', 'permit', or 'certification'
+---@param credentialType string The specific credential key
+---@param extra table Additional metadata (issued_at, expires_at)
+function UpdateCDLItem(src, citizenid, category, credentialType, extra)
+    if not src or not citizenid then return end
+
+    -- Find existing CDL item in player inventory
+    local existingItems = exports.ox_inventory:Search(src, 'slots', 'cdl')
+    local existingSlot = existingItems and existingItems[1]
+
+    local metadata = {}
+    if existingSlot and existingSlot.metadata then
+        -- Copy existing metadata
+        for k, v in pairs(existingSlot.metadata) do
+            metadata[k] = v
+        end
+    end
+
+    -- Ensure metadata sub-tables exist
+    metadata.citizenid = citizenid
+    metadata.endorsements = metadata.endorsements or {}
+    metadata.permits = metadata.permits or {}
+    metadata.certifications = metadata.certifications or {}
+
+    -- Apply the new credential
+    if category == 'license' then
+        if CDL_LICENSE_TYPES[credentialType] then
+            metadata.license_class = credentialType
+        elseif CDL_ENDORSEMENT_TYPES[credentialType] then
+            metadata.endorsements[credentialType] = true
+        elseif CDL_PERMIT_TYPES[credentialType] then
+            metadata.permits[credentialType] = extra and extra.expires_at or true
+        end
+    elseif category == 'certification' then
+        metadata.certifications[credentialType] = true
+    end
+
+    metadata.issued_at = extra and extra.issued_at or GetServerTime()
+
+    -- Remove old CDL item if it exists, then add updated one
+    if existingSlot then
+        exports.ox_inventory:RemoveItem(src, 'cdl', 1, nil, existingSlot.slot)
+    end
+
+    exports.ox_inventory:AddItem(src, 'cdl', 1, metadata)
+end
+
+-- ─────────────────────────────────────────────
 -- LICENSE ISSUANCE
 -- ─────────────────────────────────────────────
 
@@ -395,7 +466,7 @@ function IssueLicense(src, licenseType)
     )
     if not driver then return false end
 
-    local now = os.time()
+    local now = GetServerTime()
 
     -- Calculate expiry for oversized monthly permit (30 days)
     local expiresAt = nil
@@ -423,11 +494,8 @@ function IssueLicense(src, licenseType)
         ]], { driver.id, citizenid, licenseType, now, expiresAt })
     end
 
-    -- Add physical license item to inventory
-    local itemName = 'trucking_cdl_' .. licenseType
-    exports.ox_inventory:AddItem(src, itemName, 1, {
-        license_type = licenseType,
-        citizenid = citizenid,
+    -- Update single CDL item in inventory with new license/endorsement metadata
+    UpdateCDLItem(src, citizenid, 'license', licenseType, {
         issued_at = now,
         expires_at = expiresAt,
     })
@@ -454,7 +522,7 @@ function CheckLicense(citizenid, licenseType)
     if not license then return false end
 
     -- Check expiry if applicable
-    if license.expires_at and os.time() > license.expires_at then
+    if license.expires_at and GetServerTime() > license.expires_at then
         MySQL.update.await(
             'UPDATE truck_licenses SET status = ? WHERE id = ?',
             { 'suspended', license.id }
@@ -527,7 +595,7 @@ function StartHAZMATBriefing(src)
     -- Store briefing session
     ActiveBriefings[src] = {
         citizenid = citizenid,
-        startedAt = os.time(),
+        startedAt = GetServerTime(),
     }
 
     -- Return briefing topics (defined in config/cdl.lua or inline)
@@ -636,7 +704,7 @@ function ApplyForCertification(src, certType)
         return false, 'already_certified'
     end
 
-    local now = os.time()
+    local now = GetServerTime()
 
     -- ─── BILKINGTON CARRIER prerequisites ───
     if certType == 'bilkington_carrier' then
@@ -779,7 +847,7 @@ function IssueCertification(src, certType)
     if not driver then return false end
 
     local prereqs = CertPrerequisites[certType]
-    local now = os.time()
+    local now = GetServerTime()
     local expiresAt = nil
     if prereqs and prereqs.validDays then
         expiresAt = now + (prereqs.validDays * 86400)
@@ -811,11 +879,8 @@ function IssueCertification(src, certType)
         ]], { driver.id, citizenid, certType, backgroundFee, now, expiresAt })
     end
 
-    -- Add physical certification item to inventory
-    local itemName = 'trucking_cert_' .. certType
-    exports.ox_inventory:AddItem(src, itemName, 1, {
-        cert_type = certType,
-        citizenid = citizenid,
+    -- Update single CDL item in inventory with new certification metadata
+    UpdateCDLItem(src, citizenid, 'certification', certType, {
         issued_at = now,
         expires_at = expiresAt,
     })
@@ -848,7 +913,7 @@ function CheckCertification(citizenid, certType)
     if not cert then return false end
 
     -- Check expiry if applicable
-    if cert.expires_at and os.time() > cert.expires_at then
+    if cert.expires_at and GetServerTime() > cert.expires_at then
         MySQL.update.await(
             'UPDATE truck_certifications SET status = ? WHERE id = ?',
             { 'expired', cert.id }
@@ -867,7 +932,7 @@ end
 function RevokeCertification(citizenid, certType, reason)
     if not citizenid or not certType then return false end
 
-    local now = os.time()
+    local now = GetServerTime()
     -- Reinstatement eligible after 30 days
     local reinstatementAt = now + (30 * 86400)
 
@@ -974,7 +1039,16 @@ RegisterNetEvent('trucking:server:startWrittenTest', function(testType)
     if not RateLimitEvent(src, 'startWrittenTest', 5000) then return end
 
     local success, result = StartWrittenTest(src, testType)
-    TriggerClientEvent('trucking:client:writtenTestStarted', src, success, result)
+    if success then
+        local config = TestConfig[testType]
+        TriggerClientEvent('trucking:client:cdlTestQuestions', src, {
+            testType = testType,
+            questions = result,
+            fee = config and config.fee or 0,
+        })
+    else
+        TriggerClientEvent('trucking:client:cdlTestFailed', src, result)
+    end
 end)
 
 RegisterNetEvent('trucking:server:submitTestResults', function(testType, answers)
@@ -982,7 +1056,9 @@ RegisterNetEvent('trucking:server:submitTestResults', function(testType, answers
     if not RateLimitEvent(src, 'submitTestResults', 5000) then return end
 
     local success, result = SubmitTestResults(src, testType, answers)
-    TriggerClientEvent('trucking:client:testResults', src, success, result)
+    if success then
+        TriggerClientEvent('trucking:client:testResults', src, result)
+    end
 end)
 
 RegisterNetEvent('trucking:server:startHAZMATBriefing', function()
@@ -1072,6 +1148,28 @@ AddEventHandler('playerDropped', function()
     -- Clean up active test and briefing sessions
     ActiveTests[src] = nil
     ActiveBriefings[src] = nil
+end)
+
+--- Tutorial fully completed (all stages passed)
+RegisterNetEvent('trucking:server:tutorialComplete', function()
+    local src = source
+    local player = exports.qbx_core:GetPlayer(src)
+    if not player then return end
+    if not RateLimitEvent(src, 'tutorialComplete', 10000) then return end
+
+    local citizenid = player.PlayerData.citizenid
+
+    -- Mark tutorial as completed in DB
+    DB.UpdateDriver(citizenid, { tutorial_completed = true, tutorial_completed_at = GetServerTime() })
+
+    -- Issue Class B license on tutorial completion
+    IssueLicense(src, 'class_b')
+
+    lib.notify(src, {
+        title = 'Tutorial Complete',
+        description = 'Class B CDL issued. You\'re ready to haul.',
+        type = 'success',
+    })
 end)
 
 print('[trucking:cdl] CDL and certification system initialized')

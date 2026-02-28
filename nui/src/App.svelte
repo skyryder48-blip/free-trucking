@@ -10,6 +10,14 @@
     companyData,
     hudData,
     convoyData,
+    cdlTestData,
+    hazmatBriefingData,
+    cdlTestResult,
+    adminData,
+    payoutData,
+    bolDetailData,
+    dispatcherData,
+    tutorialData,
     visibility,
   } from './lib/stores.js';
 
@@ -17,6 +25,10 @@
   import Board from './screens/Board.svelte';
   import LoadDetail from './screens/LoadDetail.svelte';
   import ActiveLoad from './screens/ActiveLoad.svelte';
+  import CDLTest from './screens/CDLTest.svelte';
+  import HAZMATBriefing from './screens/HAZMATBriefing.svelte';
+  import Dispatcher from './screens/Dispatcher.svelte';
+  import AdminPanel from './screens/AdminPanel.svelte';
 
   /** @type {'standalone' | 'phone'} */
   let mode = 'standalone';
@@ -73,7 +85,7 @@
 
     removeListener = onNUIMessage((action, data) => {
       switch (action) {
-        case 'show':
+        case 'open':
           visibility.set(true);
           mode = data.mode || 'standalone';
           if (data.screen) {
@@ -81,7 +93,7 @@
           }
           break;
 
-        case 'hide':
+        case 'close':
           visibility.set(false);
           break;
 
@@ -93,31 +105,241 @@
           break;
 
         case 'updatePlayer':
-          playerData.set(data.player);
+          playerData.set(data);
           break;
 
         case 'updateActiveLoad':
-          activeLoad.set(data.load);
+          activeLoad.set(data);
           break;
 
         case 'updateBoard':
-          boardData.set(data.board);
+          boardData.set(data);
           break;
 
         case 'updateInsurance':
-          insuranceData.set(data.insurance);
+          insuranceData.set(data);
           break;
 
         case 'updateCompany':
-          companyData.set(data.company);
+          companyData.set(data);
           break;
 
-        case 'updateHud':
-          hudData.set(data.hud);
+        case 'updateHUD':
+          hudData.set(data);
           break;
 
-        case 'updateConvoy':
-          convoyData.set(data.convoy);
+        case 'convoyUpdate':
+          convoyData.set(data);
+          break;
+
+        case 'openCDLTest':
+          cdlTestData.set(data);
+          cdlTestResult.set(null);
+          currentScreen.set('cdlTest');
+          visibility.set(true);
+          break;
+
+        case 'openHazmatBriefing':
+          hazmatBriefingData.set(data);
+          currentScreen.set('hazmatBriefing');
+          visibility.set(true);
+          break;
+
+        case 'testResults':
+          cdlTestResult.set(data);
+          break;
+
+        case 'cdlTestResult':
+          cdlTestResult.set(data);
+          break;
+
+        case 'closeCDLTest':
+          cdlTestData.set(null);
+          hazmatBriefingData.set(null);
+          cdlTestResult.set(null);
+          currentScreen.set('home');
+          break;
+
+        // --- Core UI ---
+
+        case 'profileData':
+          playerData.set(data);
+          break;
+
+        case 'boardData':
+          boardData.set(data);
+          break;
+
+        case 'showBoard':
+          boardData.set(data);
+          currentScreen.set('board');
+          visibility.set(true);
+          break;
+
+        case 'boardRefresh':
+          boardData.set(data);
+          break;
+
+        case 'reputationUpdate':
+          playerData.update(p => ({ ...p, ...data }));
+          break;
+
+        case 'loadDetail':
+          selectedLoad = data;
+          currentScreen.set('loadDetail');
+          break;
+
+        case 'payoutBreakdown':
+          payoutData.set(data);
+          break;
+
+        case 'insuranceData':
+          insuranceData.set(data);
+          break;
+
+        case 'insuranceStatus':
+          insuranceData.update(d => ({ ...d, ...data }));
+          break;
+
+        case 'companyData':
+          companyData.set(data);
+          break;
+
+        // --- Load State ---
+
+        case 'loadReserved':
+          activeLoad.set(data);
+          break;
+
+        case 'reservationCancelled':
+          activeLoad.set(null);
+          break;
+
+        case 'loadDetailResponse':
+          selectedLoad = data;
+          currentScreen.set('loadDetail');
+          break;
+
+        // --- Company ---
+
+        case 'companyMemberUpdate':
+          companyData.update(d => ({ ...d, members: data.members }));
+          break;
+
+        case 'driverStatusUpdate':
+          companyData.update(d => ({ ...d, driverStatus: data }));
+          break;
+
+        case 'openDispatcherUI':
+          dispatcherData.set(data);
+          currentScreen.set('dispatcher');
+          visibility.set(true);
+          break;
+
+        case 'closeDispatcherUI':
+          dispatcherData.set(null);
+          currentScreen.set('home');
+          break;
+
+        case 'companyActiveLoads':
+          companyData.update(d => ({ ...d, activeLoads: data.loads || data }));
+          break;
+
+        case 'companyMembers':
+          companyData.update(d => ({ ...d, members: data.members || data }));
+          break;
+
+        case 'driverStatus':
+          companyData.update(d => ({ ...d, driverStatus: data }));
+          break;
+
+        // --- Temperature Monitoring ---
+
+        case 'tempStatus':
+          hudData.update(h => ({ ...h, temperature: data.temperature, tempInRange: data.inRange }));
+          break;
+
+        case 'excursionUpdate':
+          hudData.update(h => ({ ...h, excursion: data }));
+          break;
+
+        case 'excursionStarted':
+          hudData.update(h => ({ ...h, excursionActive: true, excursion: data }));
+          break;
+
+        case 'excursionEnded':
+          hudData.update(h => ({ ...h, excursionActive: false, excursion: null }));
+          break;
+
+        case 'excursionStatus':
+          hudData.update(h => ({ ...h, excursion: data }));
+          break;
+
+        // --- Livestock ---
+
+        case 'welfareStatus':
+          hudData.update(h => ({ ...h, welfare: data }));
+          break;
+
+        // --- BOL ---
+
+        case 'showBOLDetail':
+          bolDetailData.set(data);
+          break;
+
+        case 'hideBOLDetail':
+          bolDetailData.set(null);
+          break;
+
+        // --- CDL / Tutorial ---
+
+        case 'tutorialHUD':
+          tutorialData.set(data);
+          break;
+
+        case 'credentials':
+          playerData.update(p => ({ ...p, ...data }));
+          break;
+
+        // --- Admin Panel ---
+
+        case 'openAdminPanel':
+          adminData.update(d => ({ ...d, stats: data.stats || data }));
+          currentScreen.set('admin');
+          visibility.set(true);
+          break;
+
+        case 'adminServerStats':
+          adminData.update(d => ({ ...d, stats: data }));
+          break;
+
+        case 'adminActiveLoads':
+          adminData.update(d => ({ ...d, activeLoads: data.loads || data }));
+          break;
+
+        case 'adminActiveSurges':
+          adminData.update(d => ({ ...d, activeSurges: data.surges || data }));
+          break;
+
+        case 'adminBoardState':
+          adminData.update(d => ({ ...d, boardState: data }));
+          break;
+
+        case 'adminEconomySettings':
+          adminData.update(d => ({ ...d, economySettings: data }));
+          break;
+
+        case 'adminPendingClaims':
+          adminData.update(d => ({ ...d, pendingClaims: data.claims || data }));
+          break;
+
+        case 'adminPlayerProfile':
+          adminData.update(d => ({ ...d, playerProfile: data }));
+          break;
+
+        case 'closeAdminPanel':
+          currentScreen.set('home');
+          visibility.set(false);
           break;
       }
     });
@@ -182,6 +404,14 @@
           />
         {:else if screen === 'activeLoad'}
           <ActiveLoad on:navigate={(e) => navigateTo(e.detail.screen, e.detail.data)} />
+        {:else if screen === 'cdlTest'}
+          <CDLTest />
+        {:else if screen === 'hazmatBriefing'}
+          <HAZMATBriefing />
+        {:else if screen === 'dispatcher'}
+          <Dispatcher on:navigate={(e) => navigateTo(e.detail.screen, e.detail.data)} />
+        {:else if screen === 'admin'}
+          <AdminPanel on:navigate={(e) => navigateTo(e.detail.screen, e.detail.data)} />
         {/if}
       </main>
     </div>

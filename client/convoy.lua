@@ -371,6 +371,106 @@ RegisterNetEvent('trucking:client:nearbyConvoyForming', function(data)
     })
 end)
 
+--- Server notifies that an open convoy is forming nearby
+RegisterNetEvent('trucking:client:convoyForming', function(data)
+    if not data then return end
+    if ConvoyActive then return end
+    lib.notify({
+        title = 'Convoy Forming',
+        description = (data.leadName or 'A driver') .. ' is forming a '
+            .. (data.convoyType or 'open') .. ' convoy. '
+            .. (data.memberCount or 1) .. '/' .. MAX_CONVOY_SIZE .. ' members.',
+        type = 'inform',
+        duration = 8000,
+    })
+end)
+
+--- Server broadcasts updated convoy member positions
+RegisterNetEvent('trucking:client:convoyMembersUpdate', function(data)
+    if not data or not ConvoyActive then return end
+    ConvoyMembers = data.members or ConvoyMembers
+    for _, member in ipairs(ConvoyMembers) do
+        if member.citizenid == GetCitizenId() then
+            IsConvoyLead = member.isLead or false
+            break
+        end
+    end
+    UpdateProximity()
+end)
+
+--- Server notifies that the convoy has started (all members confirmed)
+RegisterNetEvent('trucking:client:convoyStarted', function(data)
+    if not data or not ConvoyActive then return end
+    lib.notify({
+        title = 'Convoy Started',
+        description = 'All members ready. Convoy is now active with '
+            .. (data.memberCount or #ConvoyMembers) .. ' members.',
+        type = 'success',
+        duration = 6000,
+    })
+end)
+
+--- Server notifies convoy is unguarded (military escort destroyed)
+RegisterNetEvent('trucking:client:convoyUnguarded', function(data)
+    if not data then return end
+    lib.notify({
+        title = 'Convoy Unguarded',
+        description = data.reason or 'Military escort neutralized. Proceed with caution.',
+        type = 'error',
+        duration = 8000,
+    })
+end)
+
+--- Server responds to convoy creation request
+RegisterNetEvent('trucking:client:createConvoyResult', function(data)
+    if not data then return end
+    if data.success then
+        ConvoyId = data.convoyId
+        ConvoyType = data.convoyType
+        IsConvoyLead = true
+        ConvoyActive = true
+        ConvoyMembers = data.members or {}
+        lib.notify({
+            title = 'Convoy Formed',
+            description = 'You are the convoy lead. Type: ' .. (ConvoyType or 'open'),
+            type = 'success',
+            duration = 6000,
+        })
+        StartConvoyTracking()
+    else
+        lib.notify({
+            title = 'Convoy Failed',
+            description = data.reason or 'Unable to create convoy.',
+            type = 'error',
+        })
+    end
+end)
+
+--- Server responds to join convoy request
+RegisterNetEvent('trucking:client:joinConvoyResult', function(data)
+    if not data then return end
+    if data.success then
+        ConvoyId = data.convoyId
+        ConvoyType = data.convoyType
+        IsConvoyLead = data.isLead or false
+        ConvoyActive = true
+        ConvoyMembers = data.members or {}
+        lib.notify({
+            title = 'Convoy Joined',
+            description = 'Joined convoy with ' .. #ConvoyMembers .. ' member(s).',
+            type = 'success',
+            duration = 5000,
+        })
+        StartConvoyTracking()
+    else
+        lib.notify({
+            title = 'Join Failed',
+            description = data.reason or 'Unable to join convoy.',
+            type = 'error',
+        })
+    end
+end)
+
 -- ─────────────────────────────────────────────
 -- PROXIMITY TRACKING THREAD
 -- ─────────────────────────────────────────────
@@ -391,7 +491,7 @@ function StartConvoyTracking()
                 speed = math.floor(GetEntitySpeed(vehicle) * 2.23694) -- mph
             end
 
-            TriggerServerEvent('trucking:server:convoyPositionUpdate', ConvoyId, {
+            TriggerServerEvent('trucking:server:updateConvoyPosition', ConvoyId, {
                 x = coords.x,
                 y = coords.y,
                 z = coords.z,

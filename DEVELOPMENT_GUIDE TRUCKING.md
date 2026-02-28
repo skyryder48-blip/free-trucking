@@ -68,28 +68,44 @@ trucking:nui:eventName        — NUI callbacks
 Active loads stored in server-side table `ActiveLoads` (in-memory, synced to `truck_active_loads` on change). On resource restart, active loads are reloaded from database and mission state is restored for connected players. On player reconnect, active loads are restored and monitoring resumes (see Section 6.3).
 
 **Timing:**
-FiveM does not support `os.time()`. All timestamps use server-synced time:
-- **Server-side:** `os.time()` is available on the server only (standard Lua, runs in server context)
-- **Client-side:** Use `GetGameTimer()` for elapsed time (milliseconds, monotonic). For absolute timestamps, request from server via callback or use `GlobalState.serverTime` (synced every 30 seconds)
+`GetServerTime()` is NOT used in this resource. All timestamps are DB-synced:
+- **Server-side:** `GetServerTime()` returns UNIX timestamp sourced from MySQL `UNIX_TIMESTAMP()`, offset by `GetGameTimer()` between syncs (every 30 seconds)
+- **Client-side:** `GetServerTime()` reads `GlobalState.serverTime`. `GetGameTimer()` for elapsed time (milliseconds, monotonic)
 - **All payout/reputation/BOL timestamps:** Server-authoritative only. Client never generates timestamps for server consumption
 
 ```lua
 -- shared/utils.lua
--- Server: sync time to GlobalState every 30 seconds
-if IsDuringRecording then return end -- guard
-CreateThread(function()
-    while true do
-        GlobalState.serverTime = os.time()
-        Wait(30000)
-    end
-end)
+-- Server: fetch UNIX_TIMESTAMP() from MySQL, sync to GlobalState every 30 seconds
+if IsDuplicityVersion() then
+    local _serverTimeBase = 0
+    local _gameTimerBase  = 0
 
--- Client: get current server-synced time
-function GetServerTime()
-    return GlobalState.serverTime or 0
+    local function SyncServerTime()
+        local dbTime = MySQL.scalar.await('SELECT UNIX_TIMESTAMP()')
+        if dbTime then
+            _serverTimeBase = dbTime
+            _gameTimerBase  = GetGameTimer()
+            GlobalState.serverTime = dbTime
+        end
+    end
+
+    CreateThread(function()
+        while not MySQL or not MySQL.scalar then Wait(100) end
+        SyncServerTime()
+        while true do Wait(30000); SyncServerTime() end
+    end)
+
+    function GetServerTime()
+        if _serverTimeBase == 0 then return MySQL.scalar.await('SELECT UNIX_TIMESTAMP()') or 0 end
+        return _serverTimeBase + math.floor((GetGameTimer() - _gameTimerBase) / 1000)
+    end
+else
+    function GetServerTime()
+        return GlobalState.serverTime or 0
+    end
 end
 
--- Client: elapsed time helper (milliseconds)
+-- Both sides: elapsed time helper (milliseconds)
 function GetElapsed(startTimer)
     return GetGameTimer() - startTimer
 end
@@ -255,7 +271,7 @@ dependencies {
 - Physical BOL items
 - CDL license items  
 - Certification items
-- Fuel drum items (`stolen_fuel`, `milk_jug_bulk`)
+- Fuel drum items (`stolen_fuel`)
 - Drain items (`fuel_hose`, `valve_wrench`, `fuel_canister`)
 - Criminal items (`military_bolt_cutters`, `military_explosive_charge`)
 
@@ -1539,7 +1555,7 @@ RegisterNetEvent('QBCore:Server:OnPlayerLoaded', function()
         { citizenid }
     )
     if lastSeen then
-        local disconnectedSeconds = os.time() - lastSeen.last_seen
+        local disconnectedSeconds = GetServerTime() - lastSeen.last_seen
         -- Extend window by disconnect duration (grace period)
         MySQL.update.await([[
             UPDATE truck_active_loads
@@ -1573,7 +1589,7 @@ AddEventHandler('playerDropped', function(reason)
     if not player then return end
     MySQL.update.await(
         'UPDATE truck_drivers SET last_seen = ? WHERE citizenid = ?',
-        { os.time(), player.PlayerData.citizenid }
+        { GetServerTime(), player.PlayerData.citizenid }
     )
 end)
 ```
@@ -1899,14 +1915,14 @@ end)
 Any driver can initiate. Company or solo. Minimum 2, maximum 6 (configurable).
 
 ```lua
--- server/convoy.lua (os.time() valid — runs server-side only)
+-- server/convoy.lua (GetServerTime() valid — runs server-side only)
 RegisterNetEvent('trucking:server:createConvoy', function(convoyType)
     local src = source
     local citizenid = GetCitizenId(src)
 
     local convoyId = MySQL.insert.await(
         'INSERT INTO truck_convoys (initiated_by, convoy_type, created_at) VALUES (?,?,?)',
-        { citizenid, convoyType, os.time() }
+        { citizenid, convoyType, GetServerTime() }
     )
     
     -- Notify region players if open convoy
@@ -1998,13 +2014,13 @@ BoardConfig.SupplierExpiryHours  = { 4, 6, 8 }  -- random range
 Physical ox_inventory item: `trucking_bol`. Metadata contains the BOL number. Player carries it in inventory. Required for insurance claims. Never auto-removed — player disposes manually.
 
 ```lua
--- On load acceptance (server-side — os.time() valid)
+-- On load acceptance (server-side — GetServerTime() valid)
 exports.ox_inventory:addItem(src, 'trucking_bol', 1, {
     bol_number  = bolNumber,
     cargo_type  = cargoType,
     shipper     = shipperName,
     destination = destinationLabel,
-    issued_at   = os.time(),
+    issued_at   = GetServerTime(),
 })
 ```
 
@@ -2088,13 +2104,13 @@ function StartSealMonitoring(activeLoad)
 end
 
 -- server/missions.lua — Server-authoritative abandonment tracking
-local stationaryTimers = {} -- [bol_id] = os.time() when stationary reported
+local stationaryTimers = {} -- [bol_id] = GetServerTime() when stationary reported
 
 RegisterNetEvent('trucking:server:vehicleStationary', function(bolId)
     local src = source
     if not ValidateLoadOwner(src, bolId) then return end
     if not stationaryTimers[bolId] then
-        stationaryTimers[bolId] = os.time()
+        stationaryTimers[bolId] = GetServerTime()
     end
 end)
 
@@ -2108,7 +2124,7 @@ end)
 CreateThread(function()
     while true do
         Wait(30000)
-        local now = os.time()
+        local now = GetServerTime()
         for bolId, startTime in pairs(stationaryTimers) do
             if (now - startTime) >= 600 then -- 10 minutes
                 ProcessLoadAbandoned(bolId)
@@ -2185,8 +2201,8 @@ function UpdateTemperatureState(activeLoad)
 end
 
 -- server/temperature.lua — Server-authoritative excursion tracking
-local reeferFaults = {}   -- [bol_id] = os.time()
-local engineOffTimers = {} -- [bol_id] = os.time()
+local reeferFaults = {}   -- [bol_id] = GetServerTime()
+local engineOffTimers = {} -- [bol_id] = GetServerTime()
 
 RegisterNetEvent('trucking:server:reeferFault', function(bolId, clientHealth)
     local src = source
@@ -2199,7 +2215,7 @@ RegisterNetEvent('trucking:server:reeferFault', function(bolId, clientHealth)
         -- Allow ±50 tolerance for network latency
         if math.abs(serverHealth - clientHealth) > 50 then return end
     end
-    reeferFaults[bolId] = os.time()
+    reeferFaults[bolId] = GetServerTime()
     StartExcursion(bolId)
 end)
 
@@ -2207,7 +2223,7 @@ RegisterNetEvent('trucking:server:reeferRestored', function(bolId, clientHealth)
     local src = source
     if not ValidateLoadOwner(src, bolId) then return end
     if reeferFaults[bolId] then
-        local duration = os.time() - reeferFaults[bolId]
+        local duration = GetServerTime() - reeferFaults[bolId]
         reeferFaults[bolId] = nil
         EndExcursion(bolId, duration)
     end
@@ -2216,7 +2232,7 @@ end)
 RegisterNetEvent('trucking:server:engineOff', function(bolId)
     local src = source
     if not ValidateLoadOwner(src, bolId) then return end
-    engineOffTimers[bolId] = os.time()
+    engineOffTimers[bolId] = GetServerTime()
 end)
 
 RegisterNetEvent('trucking:server:engineOn', function(bolId)
@@ -2229,7 +2245,7 @@ end)
 CreateThread(function()
     while true do
         Wait(30000)
-        local now = os.time()
+        local now = GetServerTime()
         for bolId, offTime in pairs(engineOffTimers) do
             if (now - offTime) >= 300 and not reeferFaults[bolId] then
                 reeferFaults[bolId] = offTime -- backdate to engine-off time
@@ -2395,8 +2411,8 @@ function VerifyAndApproveClaim(citizenid, bolNumber)
         citizenid, policy.id, bol.id, bolNumber,
         bol.bol_status == 'stolen' and 'theft' or 'abandonment',
         deposit.amount, premiumAllocated, claimAmount,
-        os.time() + 900,  -- 15 minute delay
-        os.time()
+        GetServerTime() + 900,  -- 15 minute delay
+        GetServerTime()
     })
 
     return true, claimAmount
@@ -2410,7 +2426,7 @@ CreateThread(function()
             SELECT ic.*, b.citizenid FROM truck_insurance_claims ic
             JOIN truck_bols b ON ic.bol_id = b.id
             WHERE ic.status = 'approved' AND ic.payout_at <= ?
-        ]], { os.time() })
+        ]], { GetServerTime() })
         
         for _, claim in ipairs(pendingClaims) do
             -- Issue payout via QBX player functions
@@ -2425,13 +2441,13 @@ CreateThread(function()
                 -- Player offline — queue for next login
                 MySQL.update.await([[
                     UPDATE truck_insurance_claims SET payout_at = ? WHERE id = ?
-                ]], { os.time() + 60, claim.id }) -- retry in 60 seconds
+                ]], { GetServerTime() + 60, claim.id }) -- retry in 60 seconds
                 goto continue
             end
 
             MySQL.update.await(
                 'UPDATE truck_insurance_claims SET status = ?, resolved_at = ? WHERE id = ?',
-                { 'paid', os.time(), claim.id }
+                { 'paid', GetServerTime(), claim.id }
             )
             ::continue::
         end
@@ -2526,7 +2542,7 @@ Automatic unlock after completing your first Tier 3 delivery. No fanfare. Leon i
 
 **No BOL generated.** No seal. No GPS. Cash payout on arrival.
 
-**Leon's milk rule:** Leon does not deal in dairy. If somehow presented with dairy-related criminal load opportunity, he declines.
+
 
 ### 21.3 Criminal Suppliers
 
@@ -3150,8 +3166,8 @@ RegisterNetEvent('trucking:server:admin:createSurge', function(data)
         data.region,
         data.cargoFilter or nil,
         data.percentage,
-        os.time(),
-        os.time() + (data.durationMinutes * 60)
+        GetServerTime(),
+        GetServerTime() + (data.durationMinutes * 60)
     })
 
     LogAdminAction(src, 'create_surge', data)
@@ -3472,11 +3488,9 @@ end
 [ ] Fuel drain robbery mechanic
 [ ] All 6 fuel drain use cases
 [ ] Drain spill zone (traction hazard)
-[ ] Dairy tanker steal (milk_jug_bulk)
-[ ] Milk spill zone (comedy hazard)
 ```
 
-**Test:** Complete Leon load. Rob a Tier 2 tanker. Drain fuel. Verify milk spill.
+**Test:** Complete Leon load. Rob a Tier 2 tanker. Drain fuel.
 
 ---
 

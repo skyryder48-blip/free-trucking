@@ -64,6 +64,8 @@ server_scripts {
     'server/leon.lua',
     'server/military.lua',
     'server/explosions.lua',
+    'server/admin.lua',
+    'server/temperature.lua',
     'server/webhooks.lua',
     'server/exports.lua',
 }
@@ -101,6 +103,7 @@ client_scripts {
     'client/hazmat.lua',
     'client/explosions.lua',
     'client/hud.lua',
+    'client/admin.lua',
 }
 
 -- ─────────────────────────────────────────────

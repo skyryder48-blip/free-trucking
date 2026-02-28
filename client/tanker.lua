@@ -24,8 +24,6 @@ local activeParticles     = {}    -- [index] = { handle, dict, isLooped }
 local DRAIN_SECONDS_PER_DRUM = Config.DrainSecondsPerDrum or 30
 local SELF_REFUEL_GALLONS    = Config.SelfRefuelGallons or 50
 local SELF_REFUEL_DURATION   = Config.SelfRefuelDuration or 60000
-local CANISTER_CAPACITY      = Config.FuelCanisterCapacity or 5
-local CANISTER_MAX_CARRY     = Config.FuelCanisterMaxCarry or 4
 
 -- Particle FX
 local FUEL_PTFX_DICT         = 'core'
@@ -72,12 +70,14 @@ local function DetectDrainUseCase(targetVehicle)
         isOwnVehicle = lib.callback.await('trucking:server:isMyTanker', false, loadPlate)
     end
 
-    -- Check inventory for required items
-    local hasHose       = exports.ox_inventory:Search('count', 'fuel_hose') > 0
-    local hasWrench     = exports.ox_inventory:Search('count', 'valve_wrench') > 0
-    local hasDrum       = exports.ox_inventory:Search('count', 'fuel_drum') > 0
-    local hasCanister   = exports.ox_inventory:Search('count', 'fuel_canister') > 0
-    local canisterCount = exports.ox_inventory:Search('count', 'fuel_canister')
+    -- Check inventory for required items (protected against missing ox_inventory)
+    local function invCount(item)
+        local ok, result = pcall(exports.ox_inventory.Search, exports.ox_inventory, 'count', item)
+        return ok and result or 0
+    end
+    local hasHose       = invCount('fuel_hose') > 0
+    local hasWrench     = invCount('valve_wrench') > 0
+    local hasDrum       = invCount('barrel_drum') > 0
 
     -- Must have fuel_hose for any drain operation
     if not hasHose then
@@ -94,26 +94,18 @@ local function DetectDrainUseCase(targetVehicle)
         return 'leon_diversion', { vehicle = targetVehicle, hasDrum = true }
     end
 
-    -- Robbery drain: not own vehicle + valve_wrench + fuel_hose + fuel_drum
+    -- Robbery drain: not own vehicle + valve_wrench + fuel_hose + barrel_drum
     if not isOwnVehicle and hasWrench and hasDrum then
         return 'robbery', { vehicle = targetVehicle }
     end
 
-    -- Self-refuel: own tanker, fuel_hose only, no containers needed
-    if isOwnVehicle and not hasDrum and not hasCanister then
+    -- Self-refuel: own tanker, fuel_hose only, no drum needed
+    if isOwnVehicle and not hasDrum then
         return 'self_refuel', { vehicle = targetVehicle, gallons = SELF_REFUEL_GALLONS }
     end
 
-    -- Emergency roadside: own tanker + fuel_canister
-    if isOwnVehicle and hasCanister then
-        return 'emergency_roadside', {
-            vehicle       = targetVehicle,
-            canisterCount = math.min(canisterCount, CANISTER_MAX_CARRY),
-        }
-    end
-
-    -- Fuel trap: own tanker, no containers at all — intentional spill
-    if isOwnVehicle and not hasDrum and not hasCanister then
+    -- Fuel trap: own tanker + no drum — intentional spill
+    if isOwnVehicle and not hasDrum then
         return 'fuel_trap', { vehicle = targetVehicle }
     end
 
@@ -142,7 +134,7 @@ end
 ---@return boolean completed True if drain completed without cancel
 local function ExecuteDrain(useCase, context)
     if drainInProgress then
-        lib.notify({ title = 'Tanker', description = 'Already draining.', type = 'error' })
+        lib.notify({ title = locale('tanker.title'), description = locale('tanker.already_draining'), type = 'error' })
         return false
     end
 
@@ -157,25 +149,19 @@ local function ExecuteDrain(useCase, context)
 
     if useCase == 'robbery' then
         duration = DRAIN_SECONDS_PER_DRUM * 1000
-        label    = 'Draining into drum...'
+        label    = locale('tanker.draining_drum')
     elseif useCase == 'self_refuel' then
         duration = SELF_REFUEL_DURATION
-        label    = 'Self-refueling...'
-    elseif useCase == 'emergency_roadside' then
-        -- Variable duration based on canister count
-        local count = context.canisterCount or 1
-        duration = math.floor((CANISTER_CAPACITY / SELF_REFUEL_GALLONS) * SELF_REFUEL_DURATION * count)
-        duration = math.max(duration, 10000) -- minimum 10 seconds
-        label    = string.format('Filling %d canister(s)...', count)
+        label    = locale('tanker.self_refueling')
     elseif useCase == 'fuel_trap' then
         duration = 10000  -- 10 seconds to open the port
-        label    = 'Opening drain port...'
+        label    = locale('tanker.opening_drain_port')
     elseif useCase == 'property_storage' then
         duration = DRAIN_SECONDS_PER_DRUM * 1000
-        label    = 'Draining into property tank...'
+        label    = locale('tanker.draining_property_tank')
     elseif useCase == 'leon_diversion' then
         duration = DRAIN_SECONDS_PER_DRUM * 1000
-        label    = 'Diverting fuel...'
+        label    = locale('tanker.diverting_fuel')
     else
         drainInProgress = false
         return false
@@ -205,8 +191,8 @@ local function HandleDrainInteraction(targetVehicle)
 
     if not useCase then
         lib.notify({
-            title       = 'Tanker',
-            description = 'You need a fuel hose to drain this tanker.',
+            title       = locale('tanker.title'),
+            description = locale('tanker.need_fuel_hose'),
             type        = 'error',
         })
         return
@@ -215,10 +201,10 @@ local function HandleDrainInteraction(targetVehicle)
     -- Show confirmation for destructive actions
     if useCase == 'robbery' or useCase == 'fuel_trap' then
         local confirm = lib.alertDialog({
-            header  = useCase == 'robbery' and 'Drain Tanker' or 'Open Drain Port',
+            header  = useCase == 'robbery' and locale('tanker.drain_tanker_header') or locale('tanker.open_drain_port_header'),
             content = useCase == 'robbery'
-                and 'Drain fuel into drums. This is theft — proceed?'
-                or 'Opening the drain with no container will create a fuel spill. Proceed?',
+                and locale('tanker.robbery_confirm')
+                or locale('tanker.fuel_trap_confirm'),
             centered = true,
             cancel   = true,
         })
@@ -229,7 +215,7 @@ local function HandleDrainInteraction(targetVehicle)
     local completed = ExecuteDrain(useCase, context)
 
     if not completed then
-        lib.notify({ title = 'Tanker', description = 'Drain cancelled.', type = 'error' })
+        lib.notify({ title = locale('tanker.title'), description = locale('tanker.drain_cancelled'), type = 'error' })
         return
     end
 
@@ -250,23 +236,16 @@ local function HandleDrainInteraction(targetVehicle)
         OpenDrainPort(targetVehicle, drainCoords)
 
         lib.notify({
-            title       = 'Tanker',
-            description = 'Drum filled. Drain port is open — fuel is spilling.',
+            title       = locale('tanker.title'),
+            description = locale('tanker.drum_filled_spilling'),
             type        = 'warning',
             duration    = 6000,
         })
 
     elseif useCase == 'self_refuel' then
         lib.notify({
-            title       = 'Tanker',
-            description = string.format('%d gallons transferred to your tank.', SELF_REFUEL_GALLONS),
-            type        = 'success',
-        })
-
-    elseif useCase == 'emergency_roadside' then
-        lib.notify({
-            title       = 'Tanker',
-            description = string.format('%d canister(s) filled.', context.canisterCount or 1),
+            title       = locale('tanker.title'),
+            description = locale('tanker.gallons_transferred'):format(SELF_REFUEL_GALLONS),
             type        = 'success',
         })
 
@@ -275,23 +254,23 @@ local function HandleDrainInteraction(targetVehicle)
         OpenDrainPort(targetVehicle, drainCoords)
 
         lib.notify({
-            title       = 'Tanker',
-            description = 'Drain port open. Fuel is pooling on the ground.',
+            title       = locale('tanker.title'),
+            description = locale('tanker.drain_port_open_pooling'),
             type        = 'warning',
             duration    = 6000,
         })
 
     elseif useCase == 'property_storage' then
         lib.notify({
-            title       = 'Tanker',
-            description = 'Fuel transferred to property tank.',
+            title       = locale('tanker.title'),
+            description = locale('tanker.fuel_to_property'),
             type        = 'success',
         })
 
     elseif useCase == 'leon_diversion' then
         lib.notify({
-            title       = 'Tanker',
-            description = 'Drums filled for Leon\'s contact.',
+            title       = locale('tanker.title'),
+            description = locale('tanker.drums_filled_leon'),
             type        = 'success',
         })
     end
@@ -627,8 +606,8 @@ function IgniteSpillZone(zoneId)
     })
 
     lib.notify({
-        title       = 'DANGER',
-        description = 'Fuel spill ignited! Get clear!',
+        title       = locale('tanker.danger_title'),
+        description = locale('tanker.spill_ignited'),
         type        = 'error',
         duration    = 8000,
     })
@@ -681,7 +660,7 @@ CreateThread(function()
     end
 
     while true do
-        Wait(1000)
+        Wait(2500)
 
         local playerPed    = cache.ped
         local playerCoords = GetEntityCoords(playerPed)
@@ -689,15 +668,15 @@ CreateThread(function()
         -- Only check when on foot, not in a vehicle
         if cache.vehicle then goto continue end
 
-        -- Check nearby vehicles for tankers
+        -- Check nearby vehicles for tankers (distance pre-filter before model check)
         local nearbyVehicle = nil
         local nearestDist   = 5.0  -- interaction range
 
         for _, vehicle in ipairs(GetGamePool('CVehicle')) do
-            if DoesEntityExist(vehicle) and IsTankerVehicle(vehicle) then
+            if DoesEntityExist(vehicle) then
                 local vehCoords = GetEntityCoords(vehicle)
                 local dist = #(playerCoords - vehCoords)
-                if dist < nearestDist then
+                if dist < nearestDist and IsTankerVehicle(vehicle) then
                     nearestDist   = dist
                     nearbyVehicle = vehicle
                 end
@@ -705,11 +684,12 @@ CreateThread(function()
         end
 
         if nearbyVehicle then
-            -- Check if player has fuel_hose
-            local hasHose = exports.ox_inventory:Search('count', 'fuel_hose') > 0
+            -- Check if player has fuel_hose (protected against missing ox_inventory)
+            local hoseOk, hoseResult = pcall(exports.ox_inventory.Search, exports.ox_inventory, 'count', 'fuel_hose')
+            local hasHose = hoseOk and hoseResult > 0
             if hasHose then
                 -- Show interaction hint
-                lib.showTextUI('[E] - Drain Tanker', { position = 'right-center' })
+                lib.showTextUI(locale('tanker.drain_prompt'), { position = 'right-center' })
 
                 -- Wait for key press
                 while nearbyVehicle and DoesEntityExist(nearbyVehicle) do

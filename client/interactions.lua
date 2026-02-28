@@ -155,7 +155,7 @@ function OpenLoadingDockInteraction()
             icon = 'fas fa-check',
             onSelect = function()
                 reeferConfirmed = true
-                TriggerServerEvent('trucking:server:confirmReeferTemp', ActiveLoad.bol_id)
+                TriggerServerEvent('trucking:server:getExcursionStatus', ActiveLoad.bol_id)
                 lib.notify({
                     title = 'Temperature Confirmed',
                     description = 'Reefer set to ' .. ActiveBOL.temp_required_min
@@ -245,7 +245,7 @@ function OpenLoadingDockInteraction()
                 cancel = true,
             })
             if confirm == 'confirm' then
-                TriggerServerEvent('trucking:server:loadAbandoned', ActiveLoad.bol_id)
+                TriggerServerEvent('trucking:server:abandonLoad', ActiveLoad.bol_id)
             end
         end,
     })
@@ -480,7 +480,7 @@ function StartManifestVerification()
     end
 
     -- Send to server for validation — server decides if manifest matches
-    TriggerServerEvent('trucking:server:verifyManifest', ActiveLoad.bol_id, {
+    TriggerServerEvent('trucking:server:manifestVerified', ActiveLoad.bol_id, {
         bol_number = input[1],
         cargo_type = input[2],
         destination = input[3],
@@ -558,7 +558,7 @@ function OpenDeliveryInteraction()
             description = 'Hand over BOL and cargo to receiving dock',
             icon = 'fas fa-check-double',
             onSelect = function()
-                TriggerServerEvent('trucking:server:loadDelivered', ActiveLoad.bol_id)
+                TriggerServerEvent('trucking:server:deliverLoad', ActiveLoad.bol_id)
             end,
         })
     else
@@ -645,7 +645,7 @@ function OpenInsuranceTerminal(location)
                 description = '8% of load value — covers next accepted load only',
                 icon = 'fas fa-file-contract',
                 onSelect = function()
-                    TriggerServerEvent('trucking:server:insurancePurchase', 'single_load')
+                    TriggerServerEvent('trucking:server:purchaseInsurance', 'single_load')
                 end,
             },
             {
@@ -713,7 +713,7 @@ function OpenInsuranceTierSelect(policyType)
                         cancel = true,
                     })
                     if confirm == 'confirm' then
-                        TriggerServerEvent('trucking:server:insurancePurchase', policyType, tier)
+                        TriggerServerEvent('trucking:server:purchaseInsurance', policyType, tier)
                     end
                 end,
             })
@@ -1079,6 +1079,53 @@ RegisterNetEvent('trucking:client:weighStationResult', function(data)
             type = 'error',
         })
     end
+end)
+
+--- Server response for insurance claim filing
+RegisterNetEvent('trucking:client:insuranceClaimResult', function(data)
+    if not data then return end
+    if data.success then
+        lib.notify({
+            title = 'Claim Filed',
+            description = 'Claim #' .. (data.claimNumber or '?') .. ' submitted. Payout pending review.',
+            type = 'success',
+            duration = 6000,
+        })
+    else
+        lib.notify({
+            title = 'Claim Denied',
+            description = data.reason or 'Unable to file claim.',
+            type = 'error',
+        })
+    end
+end)
+
+--- Server response for insurance purchase
+RegisterNetEvent('trucking:client:insurancePurchaseResult', function(data)
+    if not data then return end
+    if data.success then
+        lib.notify({
+            title = 'Insurance Purchased',
+            description = (data.policyType or 'Policy') .. ' coverage active. Cost: $' .. (data.cost or 0),
+            type = 'success',
+            duration = 6000,
+        })
+    else
+        lib.notify({
+            title = 'Purchase Failed',
+            description = data.reason or 'Unable to purchase insurance.',
+            type = 'error',
+        })
+    end
+end)
+
+--- Server response for insurance status query
+RegisterNetEvent('trucking:client:insuranceStatus', function(data)
+    if not data then return end
+    SendNUIMessage({
+        action = 'insuranceStatus',
+        data = data,
+    })
 end)
 
 -- ─────────────────────────────────────────────

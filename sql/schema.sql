@@ -3,7 +3,7 @@
 -- 24 Tables · MySQL/MariaDB · InnoDB · utf8mb4
 -- ═══════════════════════════════════════════════════════════════
 -- All timestamps stored as UNIX epoch integers (INT UNSIGNED).
--- Server-authoritative: os.time() used exclusively on the server.
+-- Server-authoritative: timestamps via MySQL UNIX_TIMESTAMP() + GetServerTime().
 -- ═══════════════════════════════════════════════════════════════
 
 

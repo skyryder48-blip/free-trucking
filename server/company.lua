@@ -68,7 +68,7 @@ function CreateCompany(src, companyName)
         return false, 'name_taken'
     end
 
-    local now = os.time()
+    local now = GetServerTime()
 
     -- Create company record
     local companyId = MySQL.insert.await(
@@ -146,7 +146,7 @@ function InviteMember(src, targetCitizenId)
         companyId = company.id,
         companyName = company.company_name,
         inviterCitizenId = citizenid,
-        expiresAt = os.time() + 60,
+        expiresAt = GetServerTime() + 60,
     }
 
     -- Notify target player if online
@@ -180,7 +180,7 @@ RegisterNetEvent('trucking:server:acceptCompanyInvite', function()
     end
 
     -- Check invite expiry
-    if os.time() > invite.expiresAt then
+    if GetServerTime() > invite.expiresAt then
         PendingInvites[citizenid] = nil
         lib.notify(src, { title = 'Company', description = 'Invite has expired.', type = 'error' })
         return
@@ -200,7 +200,7 @@ RegisterNetEvent('trucking:server:acceptCompanyInvite', function()
     -- Add as member
     MySQL.insert.await(
         'INSERT INTO truck_company_members (company_id, citizenid, role, joined_at) VALUES (?, ?, ?, ?)',
-        { invite.companyId, citizenid, 'driver', os.time() }
+        { invite.companyId, citizenid, 'driver', GetServerTime() }
     )
 
     PendingInvites[citizenid] = nil
@@ -709,7 +709,7 @@ end)
 CreateThread(function()
     while true do
         Wait(30000)
-        local now = os.time()
+        local now = GetServerTime()
         for targetCid, invite in pairs(PendingInvites) do
             if now > invite.expiresAt then
                 PendingInvites[targetCid] = nil
@@ -724,6 +724,105 @@ AddEventHandler('playerDropped', function()
     local player = exports.qbx_core:GetPlayer(src)
     if player then
         DispatchModeActive[player.PlayerData.citizenid] = nil
+    end
+end)
+
+-- ═══════════════════════════════════════════════════════════════
+-- ADDITIONAL EVENT HANDLERS
+-- ═══════════════════════════════════════════════════════════════
+
+--- Accept a dispatcher-assigned load
+RegisterNetEvent('trucking:server:acceptAssignment', function(loadId)
+    local src = source
+    local player = exports.qbx_core:GetPlayer(src)
+    if not player then return end
+    if not RateLimitEvent(src, 'acceptAssignment', 3000) then return end
+
+    -- Forward to the standard load acceptance flow
+    TriggerEvent('trucking:server:acceptLoad', loadId)
+end)
+
+--- Decline a dispatcher-assigned load
+RegisterNetEvent('trucking:server:declineAssignment', function(loadId)
+    local src = source
+    local player = exports.qbx_core:GetPlayer(src)
+    if not player then return end
+    if not RateLimitEvent(src, 'declineAssignment', 3000) then return end
+
+    local citizenid = player.PlayerData.citizenid
+
+    -- Notify the dispatcher that assignment was declined
+    local company = DB.GetDriverCompany(citizenid)
+    if company and company.dispatcher_citizenid then
+        local dispatcherSrc = GetPlayerByIdentifier(company.dispatcher_citizenid)
+        if dispatcherSrc then
+            TriggerClientEvent('trucking:client:assignmentDeclined', dispatcherSrc, {
+                driverId = citizenid,
+                loadId = loadId,
+            })
+        end
+    end
+end)
+
+--- Decline a direct offer
+RegisterNetEvent('trucking:server:declineDirectOffer', function(loadId)
+    local src = source
+    local player = exports.qbx_core:GetPlayer(src)
+    if not player then return end
+    if not RateLimitEvent(src, 'declineOffer', 3000) then return end
+
+    -- No further action needed — client handles UI dismissal
+end)
+
+--- Decline a load transfer
+RegisterNetEvent('trucking:server:declineTransfer', function(bolId)
+    local src = source
+    local player = exports.qbx_core:GetPlayer(src)
+    if not player then return end
+    if not RateLimitEvent(src, 'declineTransfer', 3000) then return end
+
+    local citizenid = player.PlayerData.citizenid
+
+    -- Notify the transferring driver
+    local activeLoad = ActiveLoads[bolId]
+    if activeLoad and activeLoad.transfer_from then
+        local fromSrc = GetPlayerByIdentifier(activeLoad.transfer_from)
+        if fromSrc then
+            TriggerClientEvent('trucking:client:transferDeclined', fromSrc, {
+                bolId = bolId,
+                declinedBy = citizenid,
+            })
+        end
+        activeLoad.transfer_from = nil
+        ActiveLoads[bolId] = activeLoad
+    end
+end)
+
+--- Periodic driver status broadcast for dispatcher fleet view
+RegisterNetEvent('trucking:server:driverStatusBroadcast', function(statusData)
+    local src = source
+    local player = exports.qbx_core:GetPlayer(src)
+    if not player then return end
+    if not RateLimitEvent(src, 'statusBroadcast', 5000) then return end
+
+    local citizenid = player.PlayerData.citizenid
+    local company = DB.GetDriverCompany(citizenid)
+    if not company then return end
+
+    -- Forward status to dispatchers in the same company
+    local members = DB.GetCompanyMembers(company.id)
+    if not members then return end
+
+    for _, member in ipairs(members) do
+        if DispatchModeActive[member.citizenid] then
+            local dispSrc = GetPlayerByIdentifier(member.citizenid)
+            if dispSrc then
+                TriggerClientEvent('trucking:client:driverStatus', dispSrc, {
+                    citizenid = citizenid,
+                    status = statusData,
+                })
+            end
+        end
     end
 end)
 
