@@ -269,11 +269,10 @@ dependencies {
 
 **ox_inventory usage:**
 - Physical BOL items
-- CDL license items  
-- Certification items
-- Fuel drum items (`stolen_fuel`)
-- Drain items (`fuel_hose`, `valve_wrench`, `fuel_canister`)
-- Criminal items (`military_bolt_cutters`, `military_explosive_charge`)
+- Single CDL item with metadata (license class, endorsements, permits, certifications)
+- Barrel drum items (`barrel_drum` with fill_level/contents metadata)
+- Drain items (`fuel_hose`, `valve_wrench`)
+- Criminal items (`bolt_cutters`, `military_bolt_cutters`, `spike_strip`, `comms_jammer`)
 
 ---
 
@@ -1305,8 +1304,8 @@ CargoTypes['fuel_tanker'] = {
     capacity_gallons    = 9500,
     explosion_profile   = 'fuel_tanker_full',
     drain_enabled       = true,
-    drain_item          = 'stolen_fuel',
-    drain_container     = 'fuel_drum',
+    drain_item          = 'barrel_drum',
+    drain_container     = 'barrel_drum',
 }
 
 CargoTypes['pharmaceutical'] = {
@@ -2611,19 +2610,17 @@ No additional script mechanics beyond driving to fence location. Trailer is a GT
 - Aviation tanker: 10,500 gallons
 - At 55 gal/drum: 172 drums in a standard tanker
 
-### 23.2 Drain Mechanic — Six Uses
+### 23.2 Drain Mechanic — Five Uses
 
-**1. Robbery drain:** valve_wrench + fuel_hose + fuel_drum items. 30 sec/drum. Port stays open after crew leaves. Spill grows continuously.
+**1. Robbery drain:** valve_wrench + fuel_hose + barrel_drum items. 30 sec/drum. Port stays open after crew leaves. Spill grows continuously.
 
 **2. Self-refuel:** Driver drains ~50 gallons into personal tank. 60 seconds, fuel_hose only. BOL notes operational fuel use. No violation.
 
-**3. Emergency roadside assistance:** Tanker driver drains into fuel_canister (5-gal item, 4 max capacity). Delivers to stranded vehicle. Player-to-player transaction.
+**3. Fuel trap:** Intentional drain on road — no drums. Creates traction hazard. Ignition risk. Driver takes abandonment consequences + major rep hit.
 
-**4. Fuel trap:** Intentional drain on road — no drums. Creates traction hazard. Ignition risk. Driver takes abandonment consequences + major rep hit.
+**4. Property storage delivery:** If server supports player property fuel tanks — drain directly into property storage. Arranged player-to-player. Trucking script handles drain interaction, property script handles storage.
 
-**5. Property storage delivery:** If server supports player property fuel tanks — drain directly into property storage. Arranged player-to-player. Trucking script handles drain interaction, property script handles storage.
-
-**6. Leon fuel diversion:** Partial drain at waypoint, deliver drums to Leon contact. Original load arrives short. BOL shows quantity discrepancy. Leon payout covers shortage and margin.
+**5. Leon fuel diversion:** Partial drain at waypoint, deliver drums to Leon contact. Original load arrives short. BOL shows quantity discrepancy. Leon payout covers shortage and margin.
 
 ### 23.3 Spill Zone
 
@@ -2649,7 +2646,7 @@ Triggered on major collision with HAZMAT cargo or cargo integrity < 15%.
 
 ### 24.2 Cleanup
 
-`hazmat_cleanup_kit` item (general). `hazmat_cleanup_specialist` item (class 7). 60-second interaction. Zone despawns on cleanup. Without cleanup, zone persists until server restart.
+`hazmat_cleanup_kit` item (universal, all classes including class 7). 60-second interaction. Zone despawns on cleanup. Without cleanup, zone persists until server restart.
 
 ### 24.3 Emergency Notifications
 
@@ -2743,21 +2740,25 @@ Lead escort (Military Patriot, armed NPC) → Cargo vehicle (player) → Trail e
 ```lua
 MilitaryCargo = {
     equipment_transport = {
-        { item='military_armor_vest',     weight=15, chance=0.70 },
-        { item='military_ammunition_box', weight=20, chance=0.80 },
-        { item='military_vehicle_parts',  weight=25, chance=0.60 },
-        { item='military_pistol',         weight=5,  chance=0.50 },
+        { item='armour',              weight=5,  chance=0.70 },
+        { item='ammo-9',             weight=1,  chance=0.80 },
+        { item='weapon_pistol',      weight=3,  chance=0.50 },
     },
     armory_transfer = {
-        -- All equipment items plus:
-        { item='military_rifle',          weight=8,  chance=0.60 },
-        { item='military_explosive_charge',weight=4, chance=0.30 },
-        { item='classified_documents',    weight=1,  chance=0.10 },
+        { item='armour',              weight=5,  chance=0.70 },
+        { item='ammo-9',             weight=1,  chance=0.80 },
+        { item='ammo-rifle',         weight=2,  chance=0.60 },
+        { item='weapon_pistol',      weight=3,  chance=0.50 },
+        { item='weapon_carbinerifle', weight=8, chance=0.60 },
     },
     restricted_munitions = {
-        -- All above plus:
-        { item='military_rifle_suppressed',weight=6, chance=0.40 },
-        { item='military_lmg',            weight=12, chance=0.25 },
+        { item='armour',              weight=5,  chance=0.70 },
+        { item='ammo-9',             weight=1,  chance=0.80 },
+        { item='ammo-rifle',         weight=2,  chance=0.60 },
+        { item='weapon_pistol',      weight=3,  chance=0.50 },
+        { item='weapon_carbinerifle', weight=8, chance=0.60 },
+        { item='weapon_specialcarbine', weight=8, chance=0.40 },
+        { item='weapon_combatmg',    weight=10, chance=0.25 },
     },
 }
 ```
