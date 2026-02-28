@@ -4,7 +4,6 @@
     and Leon-specific delivery completion logic.
 
     Leon board: 5 loads per refresh, refreshes every 3 hours, all expire at 04:00.
-    Leon does not deal in dairy — the milk rule.
     No BOL, no seal, no insurance, no GPS on Leon loads.
 ]]
 
@@ -91,35 +90,9 @@ local PayoutRanges = {
     critical    = { 10000, 20000 },
 }
 
---- Dairy/milk cargo keywords — Leon's milk rule
-local DAIRY_KEYWORDS = {
-    'dairy', 'milk', 'cheese', 'butter', 'cream', 'yogurt', 'yoghurt',
-    'ice_cream', 'whey', 'lactose', 'casein', 'curds',
-}
-
 --- Per-player supplier progression tracking (in-memory, synced from DB)
 ---@type table<string, table>
 local SupplierProgression = {}
-
---- Check if a cargo type or description contains dairy references
----@param cargoType string The cargo type identifier
----@param cargoDesc string|nil Optional cargo description
----@return boolean isDairy True if the cargo involves dairy
-local function IsDairyCargo(cargoType, cargoDesc)
-    if not cargoType then return false end
-
-    local lowerType = cargoType:lower()
-    local lowerDesc = cargoDesc and cargoDesc:lower() or ''
-
-    for i = 1, #DAIRY_KEYWORDS do
-        local keyword = DAIRY_KEYWORDS[i]
-        if lowerType:find(keyword, 1, true) or lowerDesc:find(keyword, 1, true) then
-            return true
-        end
-    end
-
-    return false
-end
 
 --- Generate a random integer within a range (inclusive)
 ---@param min number Minimum value
@@ -299,7 +272,7 @@ end
 
 --- Generate a single Leon load entry
 ---@param supplier table Supplier definition
----@return table|nil load The generated load, or nil if rejected (milk rule)
+---@return table|nil load The generated load, or nil on generation failure
 local function GenerateSingleLeonLoad(supplier)
     local riskTier = supplier.risk_tier or 'low'
     local feeRange = supplier.fee_range or FeeRanges[riskTier] or FeeRanges.low
@@ -339,23 +312,13 @@ local function GenerateSingleLeonLoad(supplier)
     local descPool = cargoDescriptions[riskTier] or cargoDescriptions.low
     local cargoDesc = descPool[math.random(#descPool)]
 
-    -- Apply milk rule — reject dairy cargo
-    if IsDairyCargo(cargoDesc, nil) then
-        return nil
-    end
-
-    -- Generate random cargo type that is NOT dairy
+    -- Generate random cargo type
     local cargoTypes = {
         'contraband_general', 'contraband_electronics', 'contraband_weapons_parts',
         'contraband_chemicals', 'contraband_pharmaceuticals', 'contraband_luxury',
         'diverted_freight', 'grey_market_goods', 'restricted_materials',
     }
     local cargoType = cargoTypes[math.random(#cargoTypes)]
-
-    -- Final milk rule check on generated cargo type
-    if IsDairyCargo(cargoType, cargoDesc) then
-        return nil
-    end
 
     local expiry = GetLeonExpiry()
 
@@ -467,7 +430,7 @@ function GenerateLeonBoard(citizenid)
 
     local board = {}
     local attempts = 0
-    local maxAttempts = LEON_BOARD_SIZE * 3 -- Account for milk rule rejections
+    local maxAttempts = LEON_BOARD_SIZE * 3
 
     while #board < LEON_BOARD_SIZE and attempts < maxAttempts do
         attempts = attempts + 1
@@ -901,12 +864,6 @@ function RegisterLeonLoadType(loadTypeData)
     local validTiers = { low = true, medium = true, high = true, critical = true }
     if not validTiers[loadTypeData.risk_tier] then
         print(('[Trucking Leon] Invalid risk tier: %s'):format(tostring(loadTypeData.risk_tier)))
-        return false
-    end
-
-    -- Apply milk rule check on label
-    if IsDairyCargo(loadTypeData.label, loadTypeData.supplier_id) then
-        print('[Trucking Leon] Rejected load type registration — milk rule violation')
         return false
     end
 

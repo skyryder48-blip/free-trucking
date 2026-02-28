@@ -255,7 +255,7 @@ dependencies {
 - Physical BOL items
 - CDL license items  
 - Certification items
-- Fuel drum items (`stolen_fuel`, `milk_jug_bulk`)
+- Fuel drum items (`stolen_fuel`)
 - Drain items (`fuel_hose`, `valve_wrench`, `fuel_canister`)
 - Criminal items (`military_bolt_cutters`, `military_explosive_charge`)
 
@@ -2526,7 +2526,7 @@ Automatic unlock after completing your first Tier 3 delivery. No fanfare. Leon i
 
 **No BOL generated.** No seal. No GPS. Cash payout on arrival.
 
-**Leon's milk rule:** Leon does not deal in dairy. If somehow presented with dairy-related criminal load opportunity, he declines.
+
 
 ### 21.3 Criminal Suppliers
 
@@ -3472,11 +3472,9 @@ end
 [ ] Fuel drain robbery mechanic
 [ ] All 6 fuel drain use cases
 [ ] Drain spill zone (traction hazard)
-[ ] Dairy tanker steal (milk_jug_bulk)
-[ ] Milk spill zone (comedy hazard)
 ```
 
-**Test:** Complete Leon load. Rob a Tier 2 tanker. Drain fuel. Verify milk spill.
+**Test:** Complete Leon load. Rob a Tier 2 tanker. Drain fuel.
 
 ---
 

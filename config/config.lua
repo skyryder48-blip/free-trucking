@@ -163,7 +163,7 @@ Config.LeonActiveHoursEnd       = 4        -- 04:00 server time
 Config.LeonBoardSize            = 5        -- loads per refresh
 Config.LeonRefreshSeconds       = 10800    -- 3 hours between refreshes
 Config.LeonDawnExpiry            = 4        -- hour at which all Leon loads expire (04:00)
-Config.LeonMilkRule             = true     -- Leon does not deal in dairy
+
 
 -- Leon supplier unlock requirements
 Config.LeonSuppliers = {

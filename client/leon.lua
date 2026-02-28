@@ -149,24 +149,6 @@ end
 -- LEON BOARD — OX_LIB CONTEXT MENUS
 -- ═══════════════════════════════════════════════════════════════
 
---- Show Leon's dismissive dialogue when player has dairy cargo.
-local function ShowMilkDismissal()
-    lib.registerContext({
-        id      = 'leon_milk_dismiss',
-        title   = 'Leon',
-        options = {
-            {
-                title       = '"I don\'t touch dairy. Get out."',
-                description = 'Leon won\'t deal in milk products.',
-                icon        = 'cow',
-                iconColor   = 'red',
-                readOnly    = true,
-            },
-        },
-    })
-    lib.showContext('leon_milk_dismiss')
-end
-
 --- Show a specific load's fee confirmation dialog.
 ---@param loadData table Load data from server
 local function ShowFeeConfirmation(loadData)
@@ -356,15 +338,6 @@ local function CreateLeonZone()
             if not leonSpawned then return end
 
             if IsControlJustPressed(0, 51) then -- E key
-                -- Check for dairy cargo in inventory (milk rule)
-                if Config.LeonMilkRule then
-                    local hasDairy = lib.callback.await('trucking:server:checkPlayerDairy', false)
-                    if hasDairy then
-                        ShowMilkDismissal()
-                        return
-                    end
-                end
-
                 ShowLeonApproach()
             end
         end,

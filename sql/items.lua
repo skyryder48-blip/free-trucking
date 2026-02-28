@@ -283,22 +283,6 @@ return {
     },
 
     -- ─────────────────────────────────────────────
-    -- DAIRY
-    -- ─────────────────────────────────────────────
-
-    ['milk_jug_bulk'] = {
-        label    = 'Bulk Milk Jug',
-        weight   = 4000,      -- 4 kg (roughly 1 gallon)
-        stack    = true,
-        close    = true,
-        consume  = 0,
-        description = 'A gallon jug of bulk milk. Diverted from a dairy tanker haul.',
-        client = {
-            image = 'milk_jug_bulk.png',
-        },
-    },
-
-    -- ─────────────────────────────────────────────
     -- MILITARY CARGO ITEMS
     -- ─────────────────────────────────────────────
 
